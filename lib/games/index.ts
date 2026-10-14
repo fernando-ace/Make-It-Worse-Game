@@ -1,6 +1,7 @@
 import type { GameEvent, MinigameDefinition, MinigameResolution, Player } from "../types";
 import { MAKE_IT_WORSE_PROMPTS, TRUST_ME_OPTIONS } from "./content";
 import { EXPANSION_GAMES } from "./expansion";
+import { PARTY_GAMES } from "./party";
 import { withDirectorMetadata } from "../director";
 
 function emptyResult(choices: Record<string, string>, points: Record<string, number>, reasons: Record<string, string>, reveal: string, events: GameEvent[] = []): Omit<MinigameResolution, "points" | "modifiers" | "optionCounts"> {
@@ -229,7 +230,7 @@ export const hotPotato: MinigameDefinition = {
   },
 };
 
-export const MINIGAMES: Record<string, MinigameDefinition> = Object.fromEntries([splitDecision, makeItWorse, trustMe, pileOn, secretHandshake, hotPotato, ...EXPANSION_GAMES].map((game) => [game.id, withDirectorMetadata(game)]));
+export const MINIGAMES: Record<string, MinigameDefinition> = Object.fromEntries([splitDecision, makeItWorse, trustMe, pileOn, secretHandshake, hotPotato, ...EXPANSION_GAMES, ...PARTY_GAMES].map((game) => [game.id, withDirectorMetadata(game)]));
 
 export function registerMinigame(definition: MinigameDefinition) {
   if (!definition.id.trim() || MINIGAMES[definition.id]) throw new Error("A minigame with that ID is already registered");

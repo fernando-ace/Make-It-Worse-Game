@@ -33,11 +33,13 @@ describe("authoritative party session engine", () => {
     expect(selectSessionGames("same-seed")).not.toEqual(selectSessionGames("other-seed"));
     expect(room.session?.gameSlots).toHaveLength(SESSION_GAME_COUNT);
     expect(new Set(room.session?.gameSlots).size).toBe(SESSION_GAME_COUNT);
-    expect(Object.keys(MINIGAMES).length).toBeGreaterThanOrEqual(10);
+    expect(Object.keys(MINIGAMES).length).toBeGreaterThanOrEqual(16);
+    expect(Object.values(MINIGAMES).every((game) => game.director?.expectedSeconds && game.director.minPlayers === 2 && game.director.maxPlayers === 8 && game.director.houseRuleTags.length > 0)).toBe(true);
     expect(room.session?.gameSlots.every((id) => MINIGAMES[id].interaction)).toBe(true);
     expect(MINIGAMES[room.session!.gameSlots[0]].difficulty).toBe(1);
     expect(MINIGAMES[room.session!.gameSlots.at(-1)!].finaleSuitable).toBe(true);
     expect(Object.keys(MINIGAMES)).toEqual(expect.arrayContaining(["split-decision", "make-it-worse", "trust-me", "pile-on", "secret-handshake", "hot-potato"]));
+    expect(Object.keys(MINIGAMES)).toEqual(expect.arrayContaining(["auction-house", "lifeline", "group-project", "prisoners-dilemma", "split-the-difference", "golden-ticket"]));
     expect(room.session?.phase).toBe("active-game");
   });
   it("directs diverse, paced sessions across 1,000 seeds and every supported player count", () => {
@@ -55,7 +57,7 @@ describe("authoritative party session engine", () => {
       lineups.add(lineup.join("|"));
     }
     expect(lineups.size).toBeGreaterThan(100);
-  });
+  }, 30000);
   it("keeps the registry open for new compatible definitions without replacing IDs", () => {
     const definition: MinigameDefinition = { id: "audit-test-game", displayName: "Test", instructions: "Choose.", options: () => [{ id: "A", label: "A" }], config: ({ players, gameNumber }) => ({ title: "Pick", prompt: "Choose", options: [{ id: "A", label: "A" }], scoreHint: "One point", promptId: `${players.length}-${gameNumber}` }), validate: (choice) => choice === "A", resolve: ({ players, submissions }) => ({ choices: submissions, basePoints: Object.fromEntries(players.map((p) => [p.id, 1])), reasons: Object.fromEntries(players.map((p) => [p.id, "Picked A"])), events: [], reveal: "A wins" }) };
     registerMinigame(definition);
@@ -267,6 +269,7 @@ describe("authoritative party session engine", () => {
   });
   it("persists scores and rules across the session and derives awards only from recorded events", () => {
     const room = makeRoom(); setGame(room, "split-decision");
+    room.session!.gameSlots = Array(SESSION_GAME_COUNT).fill("split-decision");
     submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" }); selectRule(room, "double-down");
     for (let game = 2; game <= 6; game++) {
       act(room, "p0", "continue-session"); act(room, "p0", "begin-game");

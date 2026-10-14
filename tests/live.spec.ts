@@ -2,6 +2,7 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { existsSync } from "node:fs";
 import type { GameOption, Snapshot } from "../lib/types";
+import { MINIGAMES } from "../lib/games";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 let contexts: BrowserContext[] = [];
@@ -137,7 +138,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   const selectedGames = latest.get(host)!.session!.gameSlots;
   expect(selectedGames).toHaveLength(6);
   expect(new Set(selectedGames).size).toBe(6);
-  expect(selectedGames.filter((id) => ["group-tab", "escalation-ladder", "bluff-check", "favor-bank"].includes(id)).length).toBeGreaterThanOrEqual(2);
+  expect(new Set(selectedGames.map((id) => MINIGAMES[id].director?.family)).size).toBeGreaterThanOrEqual(4);
   await expect.poll(() => pages.every((page) => Boolean(latest.get(page)?.session?.myObjective)), { timeout: 60000 }).toBe(true);
   for (const page of pages) {
     expect(latest.get(page)?.session?.myObjective).toBeTruthy();
@@ -157,13 +158,19 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     if (gameId === "escalation-ladder") return ({ Host: "RISK 3", Alex: "RISK 3", Blair: "RISK 1" } as Record<string, string>)[playerName];
     if (gameId === "bluff-check") return ({ Host: "TOTALLY TRUE", Alex: "CALL THE BLUFF", Blair: "TOTALLY TRUE" } as Record<string, string>)[playerName];
     if (gameId === "favor-bank") return ({ Host: "BACK Alex", Alex: "BACK Host", Blair: "KEEP YOUR OWN COUNSEL" } as Record<string, string>)[playerName];
+    if (gameId === "auction-house") return ({ Host: "BID 2", Alex: "BID 1", Blair: "PASS" } as Record<string, string>)[playerName];
+    if (gameId === "lifeline") return ({ Host: "SAVE Alex", Alex: "SAVE Host", Blair: "SAVE Host" } as Record<string, string>)[playerName];
+    if (gameId === "group-project") return ({ Host: "HELP", Alex: "CARRY", Blair: "SKIP" } as Record<string, string>)[playerName];
+    if (gameId === "prisoners-dilemma") return ({ Host: "COOPERATE", Alex: "DEFECT", Blair: "COOPERATE" } as Record<string, string>)[playerName];
+    if (gameId === "split-the-difference") return ({ Host: "2", Alex: "2", Blair: "3" } as Record<string, string>)[playerName];
+    if (gameId === "golden-ticket") return ({ Host: "BACK Alex", Alex: "BACK Alex", Blair: "BACK Host" } as Record<string, string>)[playerName];
     throw new Error(`Unexpected game ${gameId}`);
   };
   const ruleByRound = ["First on the Record", "Soft Landing", "Double Down", "Bounty", "Underdog", "Double Down"];
   for (let number = 1; number <= 6; number++) {
     const { options, gameId } = await startRound(number);
     if (gameId === "make-it-worse") expect(latest.get(host)?.session?.round?.config.promptId).toBeTruthy();
-    if (gameId === "trust-me" || gameId === "pile-on" || gameId === "secret-handshake" || gameId === "hot-potato" || gameId === "favor-bank") {
+    if (["trust-me", "pile-on", "secret-handshake", "hot-potato", "favor-bank", "lifeline", "golden-ticket"].includes(gameId)) {
       expect(options.length).toBeGreaterThanOrEqual(4);
     }
     if (number === 4) {
@@ -213,6 +220,9 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     if (gameId === "trust-me") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayal")).toBe(true);
     if (gameId === "secret-handshake") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayed")).toBe(true);
     if (gameId === "favor-bank") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "alliance" && event.mutual)).toBe(true);
+    if (gameId === "lifeline") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "save" && event.successful)).toBe(true);
+    if (gameId === "group-project") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "contribution")).toBe(true);
+    if (gameId === "golden-ticket") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "support")).toBe(true);
   }
   await host.getByRole("button", { name: "See final results" }).click();
   await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();

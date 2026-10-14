@@ -40,6 +40,9 @@ export type GameEvent =
   | { type: "betrayal"; playerId: string }
   | { type: "chaos"; playerId: string }
   | { type: "alliance"; playerId: string; targetId: string; mutual: boolean }
+  | { type: "save"; actorId: string; targetId: string; successful: boolean }
+  | { type: "support"; actorId: string; targetId: string; successful: boolean }
+  | { type: "contribution"; playerId: string; effort: number; successful: boolean }
   | { type: "betrayed"; playerId: string; targetId: string }
   | { type: "power"; playerId: string; powerId: PowerId }
   | { type: "round-score"; playerId: string; points: number; highest: boolean };
