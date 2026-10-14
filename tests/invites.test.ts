@@ -28,7 +28,7 @@ describe("room invites", () => {
   it("creates a shareable link and a ready-to-send invite message", () => {
     expect(createRoomInvite("https://control.example", "ABC234")).toEqual({
       url: "https://control.example/?room=ABC234",
-      text: "Join my Control Room crew: https://control.example/?room=ABC234\nRoom code: ABC234",
+      text: "Join my Control Room party: https://control.example/?room=ABC234\nRoom code: ABC234",
     });
   });
 });

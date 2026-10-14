@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests",
-  testMatch: ["live.spec.ts", "pre-mission.spec.ts"],
+  testMatch: ["live.spec.ts", "party.spec.ts"],
   timeout: 360000,
   expect: { timeout: 12000 },
   workers: 1,
@@ -16,5 +16,6 @@ export default defineConfig({
         command: "npm run dev",
         url: "http://localhost:3000",
         reuseExistingServer: true,
+        timeout: 180000,
       },
 });

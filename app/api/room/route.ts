@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomInt, randomUUID } from "node:crypto";
 import { admin } from "@/lib/server";
-import { apply, ensureMissionVariant, join, snapshot } from "@/lib/engine";
+import { apply, join, snapshot } from "@/lib/engine";
 import type { Room } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,9 +49,9 @@ export async function POST(req: NextRequest) {
           revision: 0,
           createdAt: now,
           players: [
-            { id: uid, name, role: "Commander", ready: false, seenAt: now },
+            { id: uid, name, seenAt: now },
           ],
-          mission: null,
+          session: null,
           processed: [],
         };
         const { error } = await db.rpc("cr_create", { p_room: room });
@@ -72,7 +72,6 @@ export async function POST(req: NextRequest) {
       if (!data) throw new Error("Room not found");
       const room = data.room as Room,
         now = Number(data.now);
-      ensureMissionVariant(room);
       const revision = room.revision;
       if (body.op === "join") join(room, uid, name, now);
       else if (body.op === "leave" || body.op === "kick") {

@@ -1,79 +1,69 @@
-export const ROLES = ["Commander", "Pilot", "Engineer"] as const;
-export type Role = (typeof ROLES)[number];
 export type Player = {
   id: string;
   name: string;
-  role: Role;
-  ready: boolean;
   seenAt: number;
 };
-export type Mission = {
-  seed: string;
-  variant: MissionVariant;
-  startAt: number;
-  evaluatedAt: number;
-  deadlines: number[];
-  hull: number;
-  heading: number;
-  target: number;
-  power: "Balanced" | "Shield" | "Engines";
-  shield: "Off" | "Port" | "Starboard";
-  heat: number;
-  isolated: string | null;
-  vented: boolean;
-  repairedAt: number | null;
-  resetAt: number | null;
-  holdSince: (number | null)[];
-  completedAt: (number | null)[];
-  codeEntered: string;
-  authorizedAt: number | null;
-  endedAt: number | null;
-  result: "victory" | "defeat" | null;
-  reason: string | null;
-  commsOnline: boolean;
-  sensorsReliable: boolean;
-  propulsion: number;
-  shieldIntegrity: number;
-  lifeSupport: number;
-  repairKits: number;
-  repairsUsed: number;
-  emergencyResults: ("recovered" | "degraded" | "failed" | null)[];
-  currentEventIndex: number;
-  eventDecision: string | null;
-  eventCourse: string | null;
-  eventStabilized: boolean;
-  coolingApplied: boolean;
-  unreliableChosen: string | null;
-  systemPriorityApplied: string | null;
-  commsRestoredAt: number | null;
-  finaleReadyAt: number | null;
-  roleContributions: Record<Role, number>;
-  log: { at: number; text: string; role: Role | "Ship" }[];
-  secrets: {
-    headings: number[];
-    sectors: ("Port" | "Starboard")[];
-    symbols: Record<string, string>;
-    broken: string;
-    code: string;
-    answers: [string, string, string];
-  };
-};
-export type MissionEvent = "storm-1" | "storm-2" | "coolant";
-export type MissionVariant = {
+
+export type GamePhase =
+  | "round-intro"
+  | "minigame"
+  | "round-results"
+  | "house-rule-selection"
+  | "next-round"
+  | "final-results";
+
+export type HouseRule = {
+  id: "underdog" | "bounty" | "double-down";
   name: string;
-  order: [MissionEvent, MissionEvent, MissionEvent];
-  stageStarts: [number, number, number, number];
-  coolantAt: number;
-  intelRole: Role;
-  emergencyKinds: [EmergencyKind, EmergencyKind, EmergencyKind];
-  severity: [number, number, number];
+  description: string;
+  duration: "next-round";
+  parameters?: Record<string, string | number>;
 };
-export type EmergencyKind =
-  | "solar-flare"
-  | "reactor-overheat"
-  | "communications-failure"
-  | "debris-field"
-  | "sensor-disagreement";
+
+export type RoundResult = {
+  choices: Record<string, "RED" | "BLUE">;
+  points: Record<string, number>;
+  reasons: Record<string, string>;
+  redCount: number;
+  blueCount: number;
+};
+
+export type PartyRound = {
+  number: number;
+  minigameId: string;
+  startedAt: number;
+  deadlineAt: number;
+  submissions: Record<string, "RED" | "BLUE">;
+  result: RoundResult | null;
+};
+
+export type PartySession = {
+  phase: GamePhase;
+  roundNumber: number;
+  scores: Record<string, number>;
+  round: PartyRound | null;
+  activeRules: HouseRule[];
+  offeredRules: HouseRule[];
+  ruleWinnerId: string | null;
+  history: Array<{ number: number; result: RoundResult; rule: HouseRule | null }>;
+  maxRounds: number;
+};
+
+export type MinigameDefinition = {
+  id: string;
+  displayName: string;
+  instructions: string;
+  phases: readonly GamePhase[];
+  input: { choices: readonly string[] };
+  resolve: (input: {
+    players: Player[];
+    submissions: Record<string, string>;
+    scores: Record<string, number>;
+    rules: HouseRule[];
+  }) => RoundResult;
+  compatibleHouseRules: readonly HouseRule["id"][];
+};
+
 export type Room = {
   id: string;
   code: string;
@@ -82,75 +72,12 @@ export type Room = {
   createdAt: number;
   players: Player[];
   blockedPlayers?: string[];
-  mission: Mission | null;
-  lastMissionSeed?: string;
-  lastVariantName?: string;
-  lastEmergencyKinds?: EmergencyKind[];
+  session: PartySession | null;
   processed: string[];
 };
+
 export type Action = { type: string; value?: string | number | boolean };
-export type Shared = {
-  startAt: number;
-  serverNow: number;
-  deadlines: number[];
-  phase: number;
-  hull: number;
-  heat: number;
-  completedAt: (number | null)[];
-  repairedAt: number | null;
-  endedAt: number | null;
-  result: Mission["result"];
-  reason: string | null;
-  variant: MissionVariant;
-  commsOnline: boolean;
-  sensorsReliable: boolean;
-  propulsion: number;
-  shieldIntegrity: number;
-  lifeSupport: number;
-  repairKits: number;
-  repairsUsed: number;
-  emergencyResults: Mission["emergencyResults"];
-  eventDecision: string | null;
-  eventStabilized: boolean;
-  coolingApplied: boolean;
-  unreliableChosen: string | null;
-  systemPriorityApplied: string | null;
-  finaleReadyAt: number | null;
-  log: Mission["log"];
-  roleContributions: Mission["roleContributions"];
-};
-export type Station = {
-  heading?: number;
-  target?: number;
-  engineReady?: boolean;
-  codeEntered?: string;
-  authorized?: boolean;
-  power?: Mission["power"];
-  heat?: number;
-  isolated?: string | null;
-  vented?: boolean;
-  symbols?: Record<string, string>;
-  headings?: number[];
-  sectors?: string[];
-  brokenSymbol?: string;
-  code?: string;
-  shield?: string;
-  emergencyKind?: EmergencyKind;
-  impactDirection?: string;
-  threatSeverity?: number;
-  procedure?: string;
-  routeIntel?: string;
-  navigationTrace?: string;
-  reactorReading?: number;
-  sensorDiagnostic?: string;
-  commsRestoredAt?: number | null;
-  decision?: string | null;
-  course?: string | null;
-  propulsion?: number;
-  commsOnline?: boolean;
-  externalThreat?: string;
-  sensorForecast?: string;
-};
+
 export type Snapshot = {
   id: string;
   code: string;
@@ -159,6 +86,11 @@ export type Snapshot = {
   players: Player[];
   me: string;
   serverNow: number;
-  mission: Shared | null;
-  station: Station;
+  session: (Omit<PartySession, "round"> & {
+    round: (Omit<PartyRound, "submissions"> & {
+      answeredCount: number;
+      myChoice: "RED" | "BLUE" | null;
+      submittedIds: string[];
+    }) | null;
+  }) | null;
 };
