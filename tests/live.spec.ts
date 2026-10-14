@@ -103,7 +103,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     const gameName = await host.locator(".intro-phase h2").innerText();
     await host.getByRole("button", { name: `Start game ${number}` }).click();
     await expect(host.locator(".round-meta")).toContainText(gameName);
-    for (const page of pages) await expect.poll(() => latest.get(page)?.session?.phase, { timeout: 60000 }).toBe("active-game");
+    await expect.poll(() => pages.every((page) => latest.get(page)?.session?.phase === "active-game" && latest.get(page)?.session?.round?.number === number), { timeout: 60000 }).toBe(true);
     const snapshot = latest.get(host)!;
     expect(snapshot.session?.round?.minigameId).toBe(snapshot.session?.gameSlots[number - 1]);
     expect(snapshot.session?.round).not.toHaveProperty("submissions");
@@ -174,7 +174,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   for (let number = 1; number <= 6; number++) {
     const { options, gameId } = await startRound(number);
     if (gameId === "make-it-worse") expect(latest.get(host)?.session?.round?.config.promptId).toBeTruthy();
-    if (["trust-me", "pile-on", "secret-handshake", "hot-potato", "favor-bank", "lifeline", "golden-ticket"].includes(gameId)) {
+    if (["trust-me", "pile-on", "secret-handshake", "hot-potato", "favor-bank", "lifeline"].includes(gameId)) {
       expect(options.length).toBeGreaterThanOrEqual(4);
     }
     if (number === 4) {

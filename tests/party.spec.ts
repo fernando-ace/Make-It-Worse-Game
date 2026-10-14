@@ -5,8 +5,8 @@ import type { Snapshot } from "../lib/types";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 
-test("two friends join, play their first seeded game, and see the shared reveal", async ({ browser }) => {
-  test.setTimeout(120000);
+test("two friends complete and replay a full mobile session without horizontal overflow", async ({ browser }) => {
+  test.setTimeout(900000);
   const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
   const [host, guest] = await Promise.all(contexts.map((context) => context.newPage()));
   let roomCode = "";
@@ -40,19 +40,54 @@ test("two friends join, play their first seeded game, and see the shared reveal"
       expect(size.scroll).toBeLessThanOrEqual(size.width);
     }
     await host.getByRole("button", { name: "Start the party" }).click();
+    const firstLineup = latest.get(host)!.session!.gameSlots;
+    const playSession = async () => {
+      for (let number = 1; number <= 6; number++) {
+        if (number > 1) {
+          await host.getByRole("button", { name: "Next game" }).click();
+          await expect(host.getByRole("button", { name: `Start game ${number}` })).toBeVisible();
+        }
+        const gameId = latest.get(host)!.session!.gameSlots[number - 1];
+        await host.getByRole("button", { name: `Start game ${number}` }).click();
+        await expect.poll(() => [host, guest].every((page) => latest.get(page)?.session?.phase === "active-game" && latest.get(page)?.session?.round?.number === number)).toBe(true);
+        expect(latest.get(host)?.session?.round?.minigameId).toBe(gameId);
+        await expect(guest.locator(".reveal-list")).toHaveCount(0);
+        const firstId = latest.get(host)!.session!.round!.firstCommitPlayerId;
+        const ordered = firstId ? [pagesFor(firstId), ...[host, guest].filter((page) => latest.get(page)?.me !== firstId)] : [host, guest];
+        for (const page of ordered) {
+          await page.locator(".choice-button:not(:disabled)").first().click();
+          await expect.poll(() => Boolean(latest.get(page)?.session?.round?.myChoice)).toBe(true);
+        }
+        await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
+        await expect(host.locator(".reveal-row")).toHaveCount(2);
+        const winner = pagesFor(latest.get(host)!.session!.ruleWinnerId!);
+        await winner.getByRole("button", { name: "Choose a House Rule" }).click();
+        await expect(winner.locator(".rule-card").first()).toBeVisible();
+        await winner.locator(".rule-card").first().click();
+        await expect(host.locator(".intermission")).toBeVisible();
+        for (const page of [host, guest]) {
+          const size = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+          expect(size.scroll).toBeLessThanOrEqual(size.width);
+        }
+      }
+      await host.getByRole("button", { name: "See final results" }).click();
+      await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
+      expect(latest.get(host)?.session?.history).toHaveLength(6);
+      expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
+      await host.getByRole("button", { name: "Reveal secret objectives" }).click();
+      await expect(host.locator(".objective-result")).toHaveCount(2);
+      await host.getByRole("button", { name: "Reveal party awards" }).click();
+    };
+    const pagesFor = (playerId: string) => [host, guest].find((page) => latest.get(page)?.me === playerId)!;
     await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
-    const gameId = latest.get(host)!.session!.gameSlots[0];
-    const gameName = host.locator(".intro-phase h2");
-    await expect(gameName).toBeVisible();
-    await host.getByRole("button", { name: "Start game 1" }).click();
-    await host.locator(".choice-button:not(:disabled)").first().click();
-    await expect(host.getByText(/Your choice is locked/)).toBeVisible();
-    await expect(guest.locator(".reveal-list")).toHaveCount(0);
-    await guest.locator(".choice-button:not(:disabled)").first().click();
-    await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
-    await expect(guest.locator(".reveal-row")).toHaveCount(2);
-    expect(latest.get(host)?.session?.round?.minigameId).toBe(gameId);
-    await expect(host.locator(".reveal-groups")).toBeVisible();
+    await playSession();
+    await expect(host.getByRole("button", { name: "Reveal session records" })).toBeVisible();
+    await host.getByRole("button", { name: "Reveal session records" }).click();
+    await host.getByRole("button", { name: "Run it back with new games" }).click();
+    await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
+    expect(latest.get(host)?.session?.gameSlots).not.toEqual(firstLineup);
+    expect(latest.get(host)?.players.map((player) => player.id)).toEqual(expect.arrayContaining([latest.get(host)!.me, latest.get(guest)!.me]));
+    await playSession();
   } finally {
     if (roomCode) {
       await host.getByRole("button", { name: "Leave room" }).click({ timeout: 3000 }).catch(() => {});

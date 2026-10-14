@@ -60,9 +60,9 @@ describe("authoritative party session engine", () => {
     expect(Object.keys(MINIGAMES)).toEqual(expect.arrayContaining(["auction-house", "lifeline", "group-project", "prisoners-dilemma", "split-the-difference", "golden-ticket"]));
     expect(room.session?.phase).toBe("active-game");
   });
-  it("directs diverse, paced sessions across 1,000 seeds and every supported player count", () => {
+  it("directs diverse, paced sessions across 1,001 seeds and every supported player count", () => {
     const lineups = new Set<string>();
-    for (let count = 2; count <= 8; count++) for (let seed = 0; seed < 125; seed++) {
+    for (let count = 2; count <= 8; count++) for (let seed = 0; seed < 143; seed++) {
       const lineup = selectSessionGames(`director:${count}:${seed}`);
       const games = lineup.map((id) => MINIGAMES[id]);
       expect(lineup).toHaveLength(SESSION_GAME_COUNT);

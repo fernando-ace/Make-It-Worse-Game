@@ -1,29 +1,37 @@
 # Make It Worse
 
-Make It Worse is a browser party game for 2–8 friends. Players join with a short room code or invite link, play six quick social games, and let each round's winner stack House Rules that change what comes next.
+Make It Worse is a browser party game for 2–8 friends. Players join with a room code or invite link, play six short social games, and let choices, rivalries, alliances, private goals, and House Rules shape the whole session. The server runs the game; each player's hidden information is delivered only to that player until the reveal.
 
-## Current game loop
+## A session
 
-1. A host creates a room. Friends join with the six-character room code or a copied invite link.
-2. The host starts once at least two players are present.
-3. Play the configured six-game lineup: Split Decision, Make It Worse, Trust Me, Split Decision, Pile On, and Make It Worse.
-4. Every player makes a private choice. Choices reveal together when everyone commits or the 45-second timer ends.
-5. The round winner selects a server-generated House Rule. Its effect persists into later games, and Double Down can stack.
-6. The final screen shows standings and only the social awards supported by recorded session events.
+1. A host creates a room and shares the invite link or six-character code. Friends join without creating an account; Supabase anonymous auth preserves identity on reconnect.
+2. The host starts when everyone is ready. A deterministic Session Director builds a six-game arc from the server's session seed. It balances intensity, mechanic families, social information, player count, and finale suitability. A fresh replay seed avoids repeating the previous lineup.
+3. Players read a short contextual instruction, choose privately, and reveal together when everyone locks in or the round timer expires.
+4. Recorded events update scores, private objectives, Chaos, and session callbacks. The round winner chooses one of up to four server-selected House Rules compatible with upcoming games.
+5. Chaos is earned through play and spent on rotating, privately offered powers. Each player can use one power per game; choices and outcomes remain server-authoritative.
+6. The final game uses standings and earned progress for a bounded lead/comeback bonus. Results reveal objectives, event-backed awards, session moments, and score progression in stages. The host can replay in the same room with player identities preserved.
 
-**Split Decision** rewards minority picks. **Make It Worse** rewards calling the room's favorite escalation. **Trust Me** mixes a shared payout, a safe point, a gamble, and a swipe. **Pile On** resolves callouts and shields at once, showing who got targeted and who got through.
+## Game registry
 
-## House Rules
+Sixteen games cover prediction, social targeting, alliances, risk, bluffing, passing danger, protection, shared effort, and group incentives. New games live in `lib/games/` and register through `lib/games/index.ts` or `lib/games/party.ts`.
 
-House Rules persist through later games:
+Each `MinigameDefinition` supplies an id, short instructions, options/configuration, input validation, deterministic resolution, and structured events. Add `GameDirectorMetadata` for mechanic family, social intensity, information visibility, betrayal potential, coordination, randomness, player range, expected duration, session suitability, House Rule tags, and finale suitability. Emit structured events for any interaction that should affect scoring, objectives, or the recap. Do not derive authoritative state in the UI.
 
-- **Underdog:** the player in last place earns +1 if they score points in the next round.
-- **Bounty:** the server marks a random player. Each other player whose base score beats the marked player's base score earns +2.
-- **Double Down:** base points are doubled in later games. Underdog and Bounty bonuses are then applied. Double Down can stack.
+## Session systems
 
-The server chooses the offered cards, records the selection in private room state, and applies its scoring effect. The client cannot choose its own score, winner, or active rule.
+- **Session Director:** `lib/director.ts` deterministically chooses a distinct, paced arc. Tests cover 1,001 seeded lineups across player counts 2–8.
+- **House Rules:** `HOUSE_RULES` and common scoring are in `lib/engine.ts`. Rules declare compatible future game families, stacking behavior, activation timing, and explicit effects. Each scoring modifier is retained in the result so players can see why points changed. Add a rule by updating the `HouseRuleEffect` union, registry/compatibility, server-side scoring, explanation copy, and focused engine tests.
+- **Objectives:** `lib/objectives.ts` assigns unique feasible goals from the actual lineup and power offers. Progress is based on recorded events and retained privately per player. Add an objective with compatible games, target/reward, optional friend or power constraints, and an event matcher.
+- **Chaos and powers:** `lib/powers.ts` defines costs, intent, target requirements, and rotating deterministic offers. The engine checks eligibility, affordability, and once-per-game limits, then applies effects in an explicit server-side order. Add a power with its event/outcome semantics, private offer rules, privacy tests, and result messaging.
+- **Awards and recap:** `lib/games/index.ts` resolves awards from session events. Unsupported categories stay absent; ties are resolved by stable player order. `sessionRecap` in `components/control-room.tsx` renders event-backed callbacks and score progression.
 
-## Run locally
+## Authority and privacy
+
+`lib/engine.ts` owns room transitions, session progression, input validation, deterministic outcomes, scoring, Chaos, powers, and objective progress. `snapshot()` returns a role-filtered view: canonical seeds, objectives, active powers, unrevealed submissions, and other players' private intel stay server-side. A reconnect receives the same player's permitted state. Do not move identity, time, outcomes, or canonical scores to client input.
+
+`app/api/room/route.ts` authenticates each request with Supabase `getUser`, checks room membership, and commits through the revision-checked database RPC. Supabase Realtime prompts clients to sync; polling repairs missed notifications. Existing SQL boundaries and migrations are sufficient; no schema change is needed for the session systems.
+
+## Running locally
 
 Requires Node.js 22 or newer, npm, and a Supabase project.
 
@@ -41,26 +49,7 @@ Set these values in `.env.local` and in the hosting environment:
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key (legacy anon key also works) | Yes |
 | `SUPABASE_SECRET_KEY` | Server-only key used by room API routes | No |
 
-Never commit `.env.local` or expose the server key through a `NEXT_PUBLIC_` variable.
-
-## Supabase setup
-
-1. Enable Anonymous Sign-ins under Authentication → Sign In / Providers. Players use an anonymous Supabase identity and do not see a login screen.
-2. Apply the SQL in `supabase/migrations/20261002040000_control_room.sql` and `supabase/migrations/20261006003724_room_membership_removal.sql` to a fresh project. For an existing linked project, inspect its migration history before pushing migrations.
-3. Confirm `cr_rooms` is in the `supabase_realtime` publication.
-4. Set the three environment variables above.
-
-The included local Supabase config only contains this app's auth settings. Merge those settings into a generated local Supabase config before starting a local Supabase stack.
-
-## Architecture and authority
-
-- `lib/types.ts` defines the shared minigame contract, private round inputs, public reveal, and score events. `lib/games/` contains each registered game and structured prompt data. `lib/engine.ts` owns room transitions, validation, reveal timing, common House Rule scoring, winner selection, and session awards.
-- `app/api/room/route.ts` authenticates each request with Supabase `getUser`, checks membership, and commits each change through a revision-checked database RPC. Concurrent actions retry against the newest room revision.
-- Canonical room state—including unrevealed choices—stays in the server-only `cr_private.states` table. `snapshot()` returns only the current player's submission status and choice until reveal; other players' choices are omitted from the snapshot until results.
-- `cr_rooms` contains room notifications and `cr_members` tracks membership. Existing RLS and service-only RPC boundaries isolate rooms and prevent browser clients from writing authoritative state.
-- Supabase Realtime prompts clients to sync; a short polling interval repairs missed notifications. Reopening a browser with its saved anonymous session reconnects the same player. A new player can join only before the host starts.
-
-The registry defines game identity, options, configuration, input validation, authoritative resolution, and reveal output. The server selects six distinct games by shuffling registered IDs with the server-created room ID as the session seed; the same seed reproduces the same order. Game results expose base points and structured events; the common scorer applies House Rules consistently.
+Never commit `.env.local` or expose the server key through a `NEXT_PUBLIC_` variable. Enable Anonymous Sign-ins, apply the migrations in `supabase/migrations/`, and confirm `cr_rooms` is in the `supabase_realtime` publication. For an existing linked project, inspect its migration history before changing it.
 
 ## Validation
 
@@ -74,4 +63,6 @@ npm run test:live
 npm run test:party
 ```
 
-Unit/API tests cover every game's validation, privacy, deterministic resolution, scoring, House Rule interaction, and reconnect state. `test:live` uses three isolated browser contexts against the configured Supabase project and completes all six games. `test:party` checks a mobile party flow at 390px and horizontal overflow.
+Vitest covers game input/resolution, privacy, deterministic scoring, 1,001 Session Director seeds, objectives, powers, replay, and API behavior. `test:live` completes a six-game three-player session against the configured Supabase project, including reconnect, private state, powers, awards, and same-room replay. `test:party` checks mobile party flow at 390px and horizontal overflow. These live checks create temporary test rooms/users and clean them up.
+
+See [docs/session-simulation.md](docs/session-simulation.md) for the deterministic simulation coverage and findings.
