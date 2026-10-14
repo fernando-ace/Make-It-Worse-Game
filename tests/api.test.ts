@@ -54,14 +54,14 @@ describe("authenticated party room API", () => {
     await request("p", { op: "join", code: room.code, name: "Friend" });
     expect((await request("p", { op: "action", code: room.code, action: { type: "start" } })).data).toMatchObject({ error: "Only the host can start the party" });
     await request("c", { op: "action", code: room.code, action: { type: "start" } });
-    await request("c", { op: "action", code: room.code, action: { type: "begin-round" } });
+    await request("c", { op: "action", code: room.code, action: { type: "begin-game" } });
     await request("c", { op: "action", code: room.code, action: { type: "submit", value: "RED" } });
     const hidden = await request("p", { op: "action", code: room.code, action: { type: "sync", value: false } });
     expect(hidden.data.session.round.myChoice).toBeNull();
     expect(hidden.data.session.round).not.toHaveProperty("submissions");
     await request("p", { op: "action", code: room.code, action: { type: "submit", value: "BLUE" } });
     const saved = store.rooms.get(room.code)!;
-    expect(saved.session?.phase).toBe("round-results");
+    expect(saved.session?.phase).toBe("game-results");
     expect(saved.session?.round?.result?.points).toEqual({ c: 1, p: 1 });
     await request("c", { op: "action", code: room.code, action: { type: "open-rule-selection" } });
     await request("c", { op: "action", code: room.code, action: { type: "select-rule", value: "double-down" } });
@@ -79,3 +79,4 @@ describe("authenticated party room API", () => {
     expect((await request("x", { op: "action", code: first.code, action: { type: "sync" } })).status).toBe(410);
   });
 });
+
