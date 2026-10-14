@@ -20,6 +20,19 @@ export type HouseRule = {
 
 export type GameOption = { id: string; label: string; detail?: string };
 export type MinigameConfig = { title: string; prompt: string; options: GameOption[]; scoreHint: string; promptId?: string };
+export type GameDirectorMetadata = {
+  family: string;
+  socialIntensity: 1 | 2 | 3;
+  informationVisibility: "public" | "simultaneous-secret" | "asymmetric";
+  betrayalPotential: 1 | 2 | 3;
+  coordination: 1 | 2 | 3;
+  randomness: 1 | 2 | 3;
+  minPlayers: number;
+  maxPlayers: number;
+  expectedSeconds: number;
+  sessionTags: Array<"opener" | "social" | "read" | "stakes" | "chaos" | "finale">;
+  houseRuleTags: string[];
+};
 export type GameEvent =
   | { type: "target"; actorId: string; targetId: string }
   | { type: "gamble"; playerId: string; result: "won" | "lost" }
@@ -72,6 +85,7 @@ export type MinigameDefinition = {
   finaleSuitable?: boolean;
   difficulty?: 1 | 2 | 3;
   expansion?: boolean;
+  director?: GameDirectorMetadata;
   options: (input: { players: Player[]; gameNumber: number }) => GameOption[];
   config: (input: { players: Player[]; gameNumber: number }) => MinigameConfig;
   validate: (choice: string, input: { players: Player[]; playerId: string; config: MinigameConfig }) => boolean;

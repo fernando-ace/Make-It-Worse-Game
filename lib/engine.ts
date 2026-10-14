@@ -4,12 +4,14 @@ import { MINIGAMES, resolveAwards, registerMinigame } from "./games";
 import { assignObjectives, advanceObjectives } from "./objectives";
 import { POWERS } from "./powers";
 import { seededShuffle } from "./seed";
+import { directSessionGames } from "./director";
 
 const ROUND_SECONDS = 45;
 export const SESSION_GAME_COUNT = 6;
 export { MINIGAMES, registerMinigame };
 export { OBJECTIVES } from "./objectives";
 export { POWER_LIST } from "./powers";
+export { GAME_DIRECTOR_METADATA, directSessionGames } from "./director";
 export const HOUSE_RULES: Omit<HouseRule, "effect">[] = [
   { id: "underdog", name: "Underdog", description: "The player in last place earns bonus points whenever they score.", activationPoint: "next-game", canStack: false },
   { id: "bounty", name: "Bounty", description: "Outscore the marked player's base points to earn a bonus.", activationPoint: "next-game", canStack: false },
@@ -19,31 +21,7 @@ export const HOUSE_RULES: Omit<HouseRule, "effect">[] = [
 ];
 
 export function selectSessionGames(seed: string): string[] {
-  const ids = Object.keys(MINIGAMES).sort();
-  if (ids.length < SESSION_GAME_COUNT) throw new Error(`At least ${SESSION_GAME_COUNT} minigames must be registered`);
-  const shuffled = seededShuffle(ids, seed);
-  const selected: string[] = [];
-  const pushBest = (candidates: string[], preferNewInteraction: boolean, maxDifficulty?: number) => {
-    const options = candidates.filter((id) => !selected.includes(id) && (maxDifficulty === undefined || (MINIGAMES[id].difficulty ?? 2) <= maxDifficulty));
-    const best = options.find((id) => !preferNewInteraction || !selected.length || MINIGAMES[id].interaction !== MINIGAMES[selected.at(-1)!].interaction) ?? options[0];
-    if (best) selected.push(best);
-  };
-  pushBest(shuffled.filter((id) => (MINIGAMES[id].difficulty ?? 2) === 1), false, 1);
-  const expansionGames = shuffled.filter((id) => MINIGAMES[id].expansion);
-  const readGames = shuffled.filter((id) => MINIGAMES[id].interaction === "read");
-  while (selected.length < SESSION_GAME_COUNT - 1 && (selected.filter((id) => MINIGAMES[id].expansion).length < 2 || selected.filter((id) => MINIGAMES[id].interaction === "read").length < 2)) {
-    const lastInteraction = selected.at(-1) ? MINIGAMES[selected.at(-1)!].interaction : undefined;
-    const hasTwoReads = selected.filter((id) => MINIGAMES[id].interaction === "read").length >= 2;
-    const hasTwoExpansions = selected.filter((id) => MINIGAMES[id].expansion).length >= 2;
-    if (!hasTwoReads && lastInteraction !== "read") { pushBest(readGames, true); continue; }
-    const options = hasTwoExpansions ? shuffled : expansionGames;
-    const diverse = options.filter((id) => MINIGAMES[id].interaction !== lastInteraction);
-    pushBest(diverse.length ? diverse : shuffled, true);
-  }
-  while (selected.length < SESSION_GAME_COUNT - 1) pushBest(shuffled, true);
-  pushBest(shuffled.filter((id) => MINIGAMES[id].finaleSuitable), true);
-  if (selected.length < SESSION_GAME_COUNT) for (const id of shuffled) if (!selected.includes(id) && selected.length < SESSION_GAME_COUNT) selected.push(id);
-  return selected;
+  return directSessionGames(seed, MINIGAMES);
 }
 
 function createRound(number: number, minigameId: string, config: PartyRound["config"], now: number, rules: HouseRule[], players: Player[]): PartyRound {

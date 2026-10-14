@@ -40,6 +40,22 @@ describe("authoritative party session engine", () => {
     expect(Object.keys(MINIGAMES)).toEqual(expect.arrayContaining(["split-decision", "make-it-worse", "trust-me", "pile-on", "secret-handshake", "hot-potato"]));
     expect(room.session?.phase).toBe("active-game");
   });
+  it("directs diverse, paced sessions across 1,000 seeds and every supported player count", () => {
+    const lineups = new Set<string>();
+    for (let count = 2; count <= 8; count++) for (let seed = 0; seed < 125; seed++) {
+      const lineup = selectSessionGames(`director:${count}:${seed}`);
+      const games = lineup.map((id) => MINIGAMES[id]);
+      expect(lineup).toHaveLength(SESSION_GAME_COUNT);
+      expect(new Set(lineup).size).toBe(SESSION_GAME_COUNT);
+      expect(games[0].director?.socialIntensity).toBe(1);
+      expect(games[5].finaleSuitable).toBe(true);
+      expect(new Set(games.map((game) => game.director?.family)).size).toBeGreaterThanOrEqual(4);
+      expect(games.every((game) => game.director && game.director.minPlayers <= count && game.director.maxPlayers >= count)).toBe(true);
+      expect(games.slice(1).every((game, index) => game.director?.family !== games[index].director?.family)).toBe(true);
+      lineups.add(lineup.join("|"));
+    }
+    expect(lineups.size).toBeGreaterThan(100);
+  });
   it("keeps the registry open for new compatible definitions without replacing IDs", () => {
     const definition: MinigameDefinition = { id: "audit-test-game", displayName: "Test", instructions: "Choose.", options: () => [{ id: "A", label: "A" }], config: ({ players, gameNumber }) => ({ title: "Pick", prompt: "Choose", options: [{ id: "A", label: "A" }], scoreHint: "One point", promptId: `${players.length}-${gameNumber}` }), validate: (choice) => choice === "A", resolve: ({ players, submissions }) => ({ choices: submissions, basePoints: Object.fromEntries(players.map((p) => [p.id, 1])), reasons: Object.fromEntries(players.map((p) => [p.id, "Picked A"])), events: [], reveal: "A wins" }) };
     registerMinigame(definition);
