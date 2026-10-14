@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apply, join, MINIGAMES, SESSION_GAME_COUNT, snapshot } from "../lib/engine";
+import { apply, join, MINIGAMES, registerMinigame, SESSION_GAME_COUNT, snapshot } from "../lib/engine";
 import type { Room } from "../lib/types";
 
 const now = 1_000_000;
@@ -20,6 +20,12 @@ describe("authoritative party session engine", () => {
     expect(room.session?.gameSlots).toHaveLength(SESSION_GAME_COUNT);
     expect(room.session?.gameSlots.every((id) => id === "split-decision")).toBe(true);
     expect(room.session?.phase).toBe("active-game");
+  });
+  it("allows additional minigames to register without replacing existing IDs", () => {
+    const definition = { id: "audit-test-game", displayName: "Test Game", instructions: "Choose.", input: { choices: ["A"] }, resolve: () => ({ choices: {}, points: {}, reasons: {}, redCount: 0, blueCount: 0 }) };
+    registerMinigame(definition);
+    expect(MINIGAMES[definition.id]).toBe(definition);
+    expect(() => registerMinigame(definition)).toThrow("already registered");
   });
   it("supports 2 to 8 players and rejects player nine", () => {
     for (const count of [2, 5, 8]) { const room = makeRoom(count); expect(() => act(room, "p0", "start")).not.toThrow(); }
@@ -47,28 +53,45 @@ describe("authoritative party session engine", () => {
     expect(room.session?.phase).toBe("intermission");
     expect(room.session?.activeRules[0]).toMatchObject({ id: "double-down", activationPoint: "next-game", canStack: true, effect: { type: "score-multiplier", multiplier: 2 } });
     expect(room.session?.scores.p0).toBe(2);
-    act(room, "p0", "begin-game");
+    act(room, "p0", "continue-session");
     expect(room.session?.gameNumber).toBe(2);
+    expect(room.session?.phase).toBe("game-intro");
+    act(room, "p0", "begin-game");
     submit(room, pattern);
     expect(room.session?.scores.p0).toBe(6);
     expect(room.session?.history[1].rules[0].id).toBe("double-down");
     // Repeat the registered game in each development slot to exercise the full session lifecycle.
     for (let game = 2; game < SESSION_GAME_COUNT; game++) {
       selectRule(room, "double-down");
+      act(room, "p0", "continue-session");
+      expect(room.session?.phase).toBe("game-intro");
       act(room, "p0", "begin-game");
       submit(room, pattern);
     }
     selectRule(room, "double-down");
-    act(room, "p0", "begin-game");
+    act(room, "p0", "continue-session");
     expect(room.session?.phase).toBe("final-results");
     expect(room.session?.gameNumber).toBe(SESSION_GAME_COUNT);
     expect(room.session?.scores.p0).toBeGreaterThan(6);
   });
-  it("applies persistent Underdog and Bounty effects to Split Decision", () => {
+  it("applies persistent Underdog to Split Decision", () => {
     const room = makeRoom(); start(room); submit(room, { p0: "RED", p1: "BLUE", p2: "BLUE" }); selectRule(room, "underdog");
-    act(room, "p0", "begin-game"); submit(room, { p0: "BLUE", p1: "RED", p2: "BLUE" });
+    act(room, "p0", "continue-session"); act(room, "p0", "begin-game"); submit(room, { p0: "BLUE", p1: "RED", p2: "BLUE" });
     expect(room.session?.round?.result?.points.p1).toBe(3);
     expect(room.session?.activeRules).toHaveLength(1);
+  });
+  it("stores the Bounty target as structured rule state and rewards beating its base score", () => {
+    const room = makeRoom(); start(room); submit(room, { p0: "RED", p1: "BLUE", p2: "BLUE" }); selectRule(room, "bounty");
+    const bounty = room.session!.activeRules.find((rule) => rule.id === "bounty")!;
+    expect(bounty.effect.type).toBe("bounty");
+    if (bounty.effect.type !== "bounty") throw new Error("Bounty effect was not configured");
+    const target = bounty.effect.targetId;
+    const scorer = room.players.find((player) => player.id !== target)!;
+    act(room, "p0", "continue-session"); act(room, "p0", "begin-game");
+    const choices = Object.fromEntries(room.players.map((player) => [player.id, player.id === scorer.id ? "RED" : "BLUE"])) as Record<string, "RED" | "BLUE">;
+    submit(room, choices);
+    expect(room.session?.round?.result?.points[scorer.id]).toBe(4);
+    expect(room.session?.history[1].rules[0].effect).toMatchObject({ type: "bounty", targetId: target, points: 2 });
   });
   it("resolves timed-out rounds and reconnects with the same player identity", () => {
     const room = makeRoom(2); start(room); act(room, "p0", "submit", "RED");

@@ -81,6 +81,8 @@ test("three players finish a six-game session with persistent scoring, rules, pr
   await host.getByRole("button", { name: /Double Down/ }).click();
   await expect(guestTwo.locator(".house-rule-panel")).toContainText("Double Down");
   await expect(host.locator(".intermission")).toContainText("SESSION 1/6");
+  await host.getByRole("button", { name: "Next game" }).click();
+  await expect(host.getByText("Game 2 of 6 · ready?", { exact: true })).toBeVisible();
   await host.getByRole("button", { name: "Start game 2" }).click();
   await expect(guestOne.locator(".active-rule")).toContainText("Double Down");
   await guestTwo.reload();
@@ -97,6 +99,8 @@ test("three players finish a six-game session with persistent scoring, rules, pr
   await expect(host.locator(".intermission")).toContainText("SESSION 2/6");
   await expect(host.locator(".standing-row").first()).toContainText("Host");
   for (let game = 3; game <= 6; game++) {
+    await host.getByRole("button", { name: "Next game" }).click();
+    await expect(host.getByText(`Game ${game} of 6 · ready?`, { exact: true })).toBeVisible();
     await host.getByRole("button", { name: `Start game ${game}` }).click();
     await host.getByRole("button", { name: /RED/ }).click();
     await guestOne.getByRole("button", { name: /BLUE/ }).click();

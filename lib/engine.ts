@@ -115,13 +115,19 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
       room.session = { phase: "game-intro", gameNumber: 1, gameSlots: Array.from({ length: SESSION_GAME_COUNT }, () => splitDecision.id), scores: Object.fromEntries(room.players.map((p) => [p.id, 0])), round: null, activeRules: [], offeredRules: [], newlyActivatedRule: null, ruleWinnerId: null, history: [] };
       break;
     }
+    case "continue-session": {
+      if (uid !== room.hostId) throw new Error("Only the host can continue the party");
+      if (!session || session.phase !== "intermission") throw new Error("The party is not at an intermission");
+      if (session.gameNumber >= session.gameSlots.length) { session.phase = "final-results"; break; }
+      session.gameNumber++;
+      session.phase = "game-intro";
+      session.round = null;
+      session.ruleWinnerId = null;
+      break;
+    }
     case "begin-game": {
       if (uid !== room.hostId) throw new Error("Only the host can begin the game");
-      if (!session || !["game-intro", "intermission"].includes(session.phase)) throw new Error("The party is not ready to begin a game");
-      if (session.phase === "intermission") {
-        if (session.gameNumber >= session.gameSlots.length) { session.phase = "final-results"; break; }
-        session.gameNumber++;
-      }
+      if (!session || session.phase !== "game-intro") throw new Error("The party is not ready to begin a game");
       const minigameId = session.gameSlots[session.gameNumber - 1];
       if (!MINIGAMES[minigameId]) throw new Error("This game is not registered");
       session.phase = "active-game";
