@@ -1,0 +1,156 @@
+import type { GameEvent, MinigameDefinition, MinigameResolution, Player } from "../types";
+import { MAKE_IT_WORSE_PROMPTS, TRUST_ME_OPTIONS } from "./content";
+
+function emptyResult(choices: Record<string, string>, points: Record<string, number>, reasons: Record<string, string>, reveal: string, events: GameEvent[] = []): Omit<MinigameResolution, "points" | "modifiers" | "optionCounts"> {
+  return { choices, basePoints: points, reasons, reveal, events };
+}
+
+export const splitDecision: MinigameDefinition = {
+  id: "split-decision",
+  displayName: "Split Decision",
+  instructions: "Choose the side you think fewer friends will pick. Your choice stays secret until the reveal.",
+  options: () => [{ id: "RED", label: "RED" }, { id: "BLUE", label: "BLUE" }],
+  config: ({ players, gameNumber }) => ({ title: "Pick your side.", prompt: "Choose the color you think the fewest people will choose.", options: splitDecision.options({ players, gameNumber }), scoreHint: "Minority pick: 2 points. A tie: 1 point each." }),
+  validate: (choice, { config }) => config.options.some((option) => option.id === choice),
+  resolve({ players, submissions }) {
+    const counts = Object.fromEntries(["RED", "BLUE"].map((id) => [id, players.filter((player) => submissions[player.id] === id).length]));
+    const tied = counts.RED === counts.BLUE;
+    const minority = tied ? null : counts.RED < counts.BLUE ? "RED" : "BLUE";
+    const base: Record<string, number> = {};
+    const reasons: Record<string, string> = {};
+    for (const player of players) {
+      const choice = submissions[player.id];
+      base[player.id] = !choice ? 0 : tied ? 1 : choice === minority ? 2 : 0;
+      reasons[player.id] = !choice ? "No pick before time ran out." : tied ? "The room split evenly." : choice === minority ? "You read the room and picked the minority." : "The room went the other way.";
+    }
+    return { ...emptyResult(submissions, base, reasons, tied ? "Perfectly split." : `${minority} was the minority.`), optionCounts: counts };
+  },
+};
+
+export const makeItWorse: MinigameDefinition = {
+  id: "make-it-worse",
+  displayName: "Make It Worse",
+  instructions: "Pick the escalation you think your friends will choose most. Read the room; the reveal decides the points.",
+  options: ({ gameNumber }) => {
+    const prompt = MAKE_IT_WORSE_PROMPTS[(gameNumber - 1) % MAKE_IT_WORSE_PROMPTS.length];
+    return prompt.options.map((label, index) => ({ id: `${prompt.id}-${index}`, label }));
+  },
+  config: ({ gameNumber }) => {
+    const prompt = MAKE_IT_WORSE_PROMPTS[(gameNumber - 1) % MAKE_IT_WORSE_PROMPTS.length];
+    return { title: "What makes it worse?", prompt: prompt.prompt, promptId: prompt.id, options: prompt.options.map((label, index) => ({ id: `${prompt.id}-${index}`, label })), scoreHint: "Pick the group’s most popular escalation. Every correct room read earns 2." };
+  },
+  validate: (choice, { config }) => config.options.some((option) => option.id === choice),
+  resolve({ players, submissions, config }) {
+    const optionCounts = Object.fromEntries(config.options.map(({ id }) => [id, players.filter((player) => submissions[player.id] === id).length]));
+    const max = Math.max(0, ...Object.values(optionCounts));
+    const topIds = new Set(Object.entries(optionCounts).filter(([, count]) => count === max && count > 0).map(([id]) => id));
+    const base = Object.fromEntries(players.map((player) => [player.id, topIds.has(submissions[player.id]) ? 2 : 0]));
+    const reasons = Object.fromEntries(players.map((player) => [player.id, !submissions[player.id] ? "No pick before time ran out." : topIds.has(submissions[player.id]) ? "You read the room: your pick tied for the crowd favorite." : "The room went for a different escalation."]));
+    const topLabels = config.options.filter(({ id }) => topIds.has(id)).map(({ label }) => `“${label}”`);
+    const events = players.filter((player) => submissions[player.id]).map((player): GameEvent => ({ type: "read", playerId: player.id, accurate: topIds.has(submissions[player.id]) }));
+    return { ...emptyResult(submissions, base, reasons, topLabels.length ? `The room made it worse with ${topLabels.join(" / ")}.` : "Nobody picked an escalation." , events), optionCounts };
+  },
+};
+
+export const trustMe: MinigameDefinition = {
+  id: "trust-me",
+  displayName: "Trust Me",
+  instructions: "A bag of surprise cash is on the table. Pick your move in secret; the group decides who walks away smiling.",
+  options: () => TRUST_ME_OPTIONS.map((option) => ({ ...option })),
+  config: () => ({ title: "There’s a bag on the table.", prompt: "It only works if the group can trust each other. What’s your move?", options: TRUST_ME_OPTIONS.map((option) => ({ ...option })), scoreHint: "Pool: +3 each only if everyone pools. Pocket: safe +1. Risk: +3 if another risks too. Swipe: +2 if anyone pools." }),
+  validate: (choice) => TRUST_ME_OPTIONS.some((option) => option.id === choice),
+  resolve({ players, submissions, config }) {
+    const optionCounts = Object.fromEntries(config.options.map(({ id }) => [id, players.filter((player) => submissions[player.id] === id).length]));
+    const swiped = optionCounts.swipe > 0;
+    const pooled = optionCounts.pool > 0;
+    const base: Record<string, number> = {};
+    const reasons: Record<string, string> = {};
+    const events: GameEvent[] = [];
+    for (const player of players) {
+      const choice = submissions[player.id];
+      if (choice === "pool") {
+        base[player.id] = !swiped && optionCounts.pool === players.length ? 3 : 0;
+        reasons[player.id] = swiped ? "Someone swiped the bag; the pool came up empty." : optionCounts.pool === players.length ? "Everyone trusted the pool. +3." : "The group split; the pool did not pay out.";
+      } else if (choice === "pocket") { base[player.id] = 1; reasons[player.id] = "You took the guaranteed point."; }
+      else if (choice === "risk") {
+        const won = optionCounts.risk >= 2;
+        base[player.id] = won ? 3 : 0;
+        reasons[player.id] = won ? "Someone else risked it too. +3." : "You were the only one to risk it.";
+        events.push({ type: "gamble", playerId: player.id, result: won ? "won" : "lost" });
+      } else if (choice === "swipe") {
+        base[player.id] = pooled ? 2 : 0;
+        reasons[player.id] = pooled ? "You swiped while someone pooled. +2." : "No one pooled, so there was nothing to swipe.";
+        events.push({ type: "betrayal", playerId: player.id }, { type: "chaos", playerId: player.id });
+      } else { base[player.id] = 0; reasons[player.id] = "No move before time ran out."; }
+    }
+    const reveal = swiped ? "Someone broke the trust. The pool was gone." : optionCounts.pool === players.length ? "Everybody trusted the group. Everybody wins." : "The bag split the room.";
+    return { ...emptyResult(submissions, base, reasons, reveal, events), optionCounts };
+  },
+};
+
+export const pileOn: MinigameDefinition = {
+  id: "pile-on",
+  displayName: "Pile On",
+  instructions: "Spend your spotlight: call out one friend, duck for cover, or take a safe point. All moves land together.",
+  options: ({ players }) => [
+    ...players.filter((player) => player.id !== `__none__`).map((player) => ({ id: `target:${player.id}`, label: `CALL OUT ${player.name}`, detail: "A hit scores 1; each target can only take two hits." })),
+    { id: "shield", label: "DUCK FOR COVER", detail: "Block the first callout aimed at you." },
+    { id: "cash", label: "TAKE A SAFE POINT", detail: "Keep your head down and bank 1." },
+  ],
+  config: ({ players, gameNumber }) => ({ title: "Spend your spotlight.", prompt: "Call out one friend, duck for cover, or take a safe point. Nobody sees the pile-on until everyone commits.", options: pileOn.options({ players, gameNumber }), scoreHint: "A callout scores 1 if it lands; the first hit on each person is blocked by a shield. Targets take 1 per hit, up to 2." }),
+  validate: (choice, { players, playerId, config }) => config.options.some((option) => option.id === choice) && (!choice.startsWith("target:") || (choice.slice(7) !== playerId && players.some((player) => player.id === choice.slice(7)))),
+  resolve({ players, submissions }) {
+    const targetCounts: Record<string, number> = Object.fromEntries(players.map(({ id }) => [id, 0]));
+    for (const choice of Object.values(submissions)) if (choice.startsWith("target:")) targetCounts[choice.slice(7)]++;
+    const shields = new Set(players.filter((player) => submissions[player.id] === "shield").map(({ id }) => id));
+    const optionCounts: Record<string, number> = Object.fromEntries(players.map(({ id }) => [id, 0]));
+    for (const choice of Object.values(submissions)) optionCounts[choice] = (optionCounts[choice] ?? 0) + 1;
+    const base: Record<string, number> = {};
+    const reasons: Record<string, string> = {};
+    const events: GameEvent[] = [];
+    for (const player of players) {
+      const choice = submissions[player.id];
+      if (choice.startsWith("target:")) {
+        const targetId = choice.slice(7);
+        const hit = Math.min(2, Math.max(0, targetCounts[targetId] - (shields.has(targetId) ? 1 : 0)));
+        base[player.id] = hit ? 1 : 0;
+        reasons[player.id] = hit ? `Your callout landed. ${players.find((p) => p.id === targetId)?.name ?? "Your target"} took ${hit} hit${hit === 1 ? "" : "s"}.` : "Your target ducked the pile-on.";
+        events.push({ type: "target", actorId: player.id, targetId }, { type: "chaos", playerId: player.id });
+      } else if (choice === "shield") {
+        const hit = targetCounts[player.id] > 0;
+        base[player.id] = hit ? 0 : 0;
+        reasons[player.id] = hit ? "You dodged a callout." : "You kept your shield in your pocket.";
+      } else if (choice === "cash") { base[player.id] = 1; reasons[player.id] = "You took the safe point."; }
+      else { base[player.id] = 0; reasons[player.id] = "No move before time ran out."; }
+      if (choice !== "shield" && choice !== "cash" && targetCounts[player.id] > 0) {
+        const hits = Math.min(2, targetCounts[player.id] - (shields.has(player.id) ? 1 : 0));
+        base[player.id] -= Math.max(0, hits);
+        if (hits) reasons[player.id] += ` Pile-on: −${hits}.`;
+      }
+    }
+    const attacked = Object.values(targetCounts).some((count) => count > 0);
+    return { ...emptyResult(submissions, base, reasons, attacked ? "The callouts landed all at once." : "Nobody called anyone out.", events), optionCounts };
+  },
+};
+
+export const MINIGAMES: Record<string, MinigameDefinition> = Object.fromEntries([splitDecision, makeItWorse, trustMe, pileOn].map((game) => [game.id, game]));
+
+export function registerMinigame(definition: MinigameDefinition) {
+  if (!definition.id.trim() || MINIGAMES[definition.id]) throw new Error("A minigame with that ID is already registered");
+  MINIGAMES[definition.id] = definition;
+}
+
+export function resolveAwards(history: Array<{ result: MinigameResolution }>, players: Player[]) {
+  const candidates: Array<{ id: "most-targeted" | "biggest-gambler" | "best-read" | "worst-ally" | "chaos-agent"; name: string; count: (playerId: string) => number; detail: string }> = [
+    { id: "most-targeted", name: "Most Targeted", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "target" && event.targetId === id).length, detail: "callouts received" },
+    { id: "biggest-gambler", name: "Biggest Gambler", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "gamble" && event.playerId === id).length, detail: "double-or-nothing risks" },
+    { id: "best-read", name: "Best Read", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "read" && event.playerId === id && event.accurate).length, detail: "crowd favorites called" },
+    { id: "worst-ally", name: "Worst Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayal" && event.playerId === id).length, detail: "bags swiped" },
+    { id: "chaos-agent", name: "Chaos Agent", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "chaos" && event.playerId === id).length, detail: "moves that shook the room" },
+  ];
+  return candidates.flatMap((award) => {
+    const ranked = players.map((player, index) => ({ player, count: award.count(player.id), index })).sort((a, b) => b.count - a.count || a.index - b.index);
+    const leader = ranked[0];
+    return leader && leader.count > 0 ? [{ id: award.id, name: award.name, playerId: leader.player.id, count: leader.count, detail: award.detail }] : [];
+  });
+}
