@@ -12,12 +12,19 @@ export { MINIGAMES, registerMinigame };
 export { OBJECTIVES } from "./objectives";
 export { POWER_LIST } from "./powers";
 export { GAME_DIRECTOR_METADATA, directSessionGames } from "./director";
-export const HOUSE_RULES: Omit<HouseRule, "effect">[] = [
-  { id: "underdog", name: "Underdog", description: "The player in last place earns bonus points whenever they score.", activationPoint: "next-game", canStack: false },
-  { id: "bounty", name: "Bounty", description: "Outscore the marked player's base points to earn a bonus.", activationPoint: "next-game", canStack: false },
-  { id: "double-down", name: "Double Down", description: "Double points scored in each later game, stacking up to ×4.", activationPoint: "next-game", canStack: true },
-  { id: "first-commit", name: "First on the Record", description: "The marked player must lock in before everyone else.", activationPoint: "next-game", canStack: false },
-  { id: "safety-net", name: "Soft Landing", description: "The marked player cannot lose points in later games.", activationPoint: "next-game", canStack: false },
+type HouseRuleDefinition = Omit<HouseRule, "effect"> & { compatibleFamilies: string[] };
+export const HOUSE_RULES: HouseRuleDefinition[] = [
+  { id: "underdog", name: "Underdog", description: "The player in last place earns +1 when they score.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["*"] },
+  { id: "bounty", name: "Bounty", description: "Outscore the marked player's base points to earn +2.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["*"] },
+  { id: "double-down", name: "Double Down", description: "Double points scored in each later game, stacking up to ×4.", activationPoint: "next-game", canStack: true, compatibleFamilies: ["*"] },
+  { id: "first-commit", name: "First on the Record", description: "The marked player must lock in before everyone else.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["*"] },
+  { id: "safety-net", name: "Soft Landing", description: "The marked player cannot lose points in later games.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["*"] },
+  { id: "target-bonus", name: "Pick a Side", description: "Targeted moves earn +1 each. Passes and callouts count.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["targeting", "passing-risk"] },
+  { id: "alliance-bonus", name: "Better Together", description: "Each mutual pact earns both friends +1.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["alliance"] },
+  { id: "chaos-bonus", name: "Chaos Dividend", description: "Moves marked as chaos earn an extra +1.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["*"] },
+  { id: "failed-risk-cost", name: "Bad Bet Fee", description: "Each failed recorded gamble costs an extra point.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["risk", "auction", "trust"] },
+  { id: "protection-bonus", name: "Guardian Angel", description: "A successful save or golden-ticket vote earns the pair +1 each.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["protection-vote", "popularity-vote"] },
+  { id: "cooperation-bonus", name: "Team Credit", description: "A successful group-project contribution earns +1.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["shared-effort"] },
 ];
 
 export { powerOffersFor } from "./powers";
@@ -64,14 +71,21 @@ function selectWinner(players: Player[], round: PartyRound) {
   return [...players].sort((a, b) => (round.result?.points[b.id] ?? 0) - (round.result?.points[a.id] ?? 0) || players.indexOf(a) - players.indexOf(b))[0]?.id ?? null;
 }
 function rulePool(session: PartySession, players: Player[]): HouseRule[] {
-  return HOUSE_RULES.filter((rule) => rule.id === "double-down"
+  const futureFamilies = new Set(session.gameSlots.slice(session.gameNumber).map((id) => MINIGAMES[id]?.director?.family).filter((family): family is string => Boolean(family)));
+  return HOUSE_RULES.filter((rule) => (rule.compatibleFamilies.includes("*") || rule.compatibleFamilies.some((family) => futureFamilies.has(family))) && (rule.id === "double-down"
     ? session.activeRules.filter((active) => active.id === rule.id).length < 2
-    : rule.canStack || !session.activeRules.some((active) => active.id === rule.id)).map((rule) => {
+    : rule.canStack || !session.activeRules.some((active) => active.id === rule.id))).map((rule) => {
     if (rule.id === "underdog") return { ...rule, effect: { type: "last-place-bonus", points: 1 } };
     if (rule.id === "double-down") return { ...rule, effect: { type: "score-multiplier", multiplier: 2 } };
     if (rule.id === "first-commit") return { ...rule, effect: { type: "forced-first", playerId: players[0]?.id ?? "" } };
     if (rule.id === "safety-net") return { ...rule, effect: { type: "score-floor", playerId: players[0]?.id ?? "" } };
-    return { ...rule, effect: { type: "bounty", points: 2, targetId: players[0]?.id ?? "" } };
+    if (rule.id === "bounty") return { ...rule, effect: { type: "bounty", points: 2, targetId: players[0]?.id ?? "" } };
+    if (rule.id === "target-bonus") return { ...rule, effect: { type: "target-bonus", points: 1 } };
+    if (rule.id === "alliance-bonus") return { ...rule, effect: { type: "alliance-bonus", points: 1 } };
+    if (rule.id === "chaos-bonus") return { ...rule, effect: { type: "chaos-bonus", points: 1 } };
+    if (rule.id === "failed-risk-cost") return { ...rule, effect: { type: "failed-risk-cost", points: 1 } };
+    if (rule.id === "protection-bonus") return { ...rule, effect: { type: "protection-bonus", points: 1 } };
+    return { ...rule, effect: { type: "cooperation-bonus", points: 1 } };
   });
 }
 function chooseOffers(session: PartySession, players: Player[]) {
@@ -81,7 +95,7 @@ function chooseOffers(session: PartySession, players: Player[]) {
     if (rule.effect.type === "bounty") return { ...rule, effect: { ...rule.effect, targetId: target } };
     return rule;
   }), `${session.seed}:offers:${session.gameNumber}`);
-  session.offeredRules = pool;
+  session.offeredRules = pool.slice(0, 4);
 }
 function applyHouseRules(players: Player[], scores: Record<string, number>, rules: HouseRule[], game: Omit<MinigameResolution, "points" | "modifiers" | "optionCounts">, optionCounts: Record<string, number>, gameNumber = 1, powers: PartySession["activePowers"] = []): MinigameResolution {
   const points: Record<string, number> = {};
@@ -109,6 +123,38 @@ function applyHouseRules(players: Player[], scores: Record<string, number>, rule
     if (target !== undefined) for (const player of players) if (player.id !== rule.effect.targetId && bountyBase[player.id] > target) {
       points[player.id] += rule.effect.points;
       modifiers[player.id].push(`Bounty +${rule.effect.points}`);
+    }
+  }
+  for (const rule of rules) {
+    const effect = rule.effect;
+    if (effect.type === "target-bonus") for (const event of game.events) if (event.type === "target" && points[event.actorId] !== undefined) {
+      points[event.actorId] += effect.points;
+      modifiers[event.actorId].push(`Pick a Side +${effect.points}`);
+    }
+    if (effect.type === "alliance-bonus") {
+      const pairs = new Set(game.events.flatMap((event) => event.type === "alliance" && event.mutual && event.playerId < event.targetId ? [`${event.playerId}|${event.targetId}`] : []));
+      for (const pair of pairs) for (const playerId of pair.split("|")) if (points[playerId] !== undefined) {
+        points[playerId] += effect.points;
+        modifiers[playerId].push(`Better Together +${effect.points}`);
+      }
+    }
+    if (effect.type === "chaos-bonus") for (const event of game.events) if (event.type === "chaos" && points[event.playerId] !== undefined) {
+      points[event.playerId] += effect.points;
+      modifiers[event.playerId].push(`Chaos Dividend +${effect.points}`);
+    }
+    if (effect.type === "failed-risk-cost") for (const event of game.events) if (event.type === "gamble" && event.result === "lost" && points[event.playerId] !== undefined) {
+      points[event.playerId] -= effect.points;
+      modifiers[event.playerId].push(`Bad Bet Fee −${effect.points}`);
+    }
+    if (effect.type === "protection-bonus") for (const event of game.events) if ((event.type === "save" || event.type === "support") && event.successful) {
+      for (const playerId of new Set([event.actorId, event.targetId])) if (points[playerId] !== undefined) {
+        points[playerId] += effect.points;
+        modifiers[playerId].push(`Guardian Angel +${effect.points}`);
+      }
+    }
+    if (effect.type === "cooperation-bonus") for (const event of game.events) if (event.type === "contribution" && event.successful && points[event.playerId] !== undefined) {
+      points[event.playerId] += effect.points;
+      modifiers[event.playerId].push(`Team Credit +${effect.points}`);
     }
   }
   const beforePowers = { ...points };

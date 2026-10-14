@@ -72,8 +72,9 @@ describe("authenticated party room API", () => {
     expect(saved.session?.phase).toBe("game-results");
     expect(saved.session?.round?.result?.points).toEqual(expect.objectContaining({ c: expect.any(Number), p: expect.any(Number) }));
     await request("c", { op: "action", code: room.code, action: { type: "open-rule-selection" } });
-    await request("c", { op: "action", code: room.code, action: { type: "select-rule", value: "double-down" } });
-    expect(store.rooms.get(room.code)?.session?.activeRules[0]?.id).toBe("double-down");
+    const selectedRule = store.rooms.get(room.code)!.session!.offeredRules[0].id;
+    await request("c", { op: "action", code: room.code, action: { type: "select-rule", value: selectedRule } });
+    expect(store.rooms.get(room.code)?.session?.activeRules[0]?.id).toBe(selectedRule);
     expect((await request("p", { op: "action", code: room.code, action: { type: "sync" } })).data.session.round.result.choices).toEqual({ c: hostChoice, p: guestChoice });
   });
 

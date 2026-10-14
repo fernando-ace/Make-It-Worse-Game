@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apply, join, MINIGAMES, powerOffersFor, registerMinigame, selectSessionGames, SESSION_GAME_COUNT, snapshot } from "../lib/engine";
+import { apply, HOUSE_RULES, join, MINIGAMES, powerOffersFor, registerMinigame, selectSessionGames, SESSION_GAME_COUNT, snapshot } from "../lib/engine";
 import { resolveAwards } from "../lib/games";
 import type { GameEvent, HouseRule, MinigameDefinition, MinigameResolution, PowerId, Room } from "../lib/types";
 
@@ -11,7 +11,21 @@ function makeRoom(count = 3): Room {
 }
 function act(room: Room, player: string, type: string, value?: string | boolean, time = now, actionId = `test-action-${++actionNumber}`) { apply(room, player, { type, value }, time, actionId); }
 function start(room: Room) { act(room, "p0", "start"); act(room, "p0", "begin-game"); }
-function selectRule(room: Room, id: string) { act(room, room.session!.ruleWinnerId!, "open-rule-selection"); act(room, room.session!.ruleWinnerId!, "select-rule", id); }
+function selectRule(room: Room, id: string) {
+  const winner = room.session!.ruleWinnerId!;
+  act(room, winner, "open-rule-selection");
+  const effects: Record<string, HouseRule["effect"]> = {
+    "underdog": { type: "last-place-bonus", points: 1 }, "bounty": { type: "bounty", points: 2, targetId: "p0" },
+    "double-down": { type: "score-multiplier", multiplier: 2 }, "first-commit": { type: "forced-first", playerId: "p0" },
+    "safety-net": { type: "score-floor", playerId: "p0" }, "target-bonus": { type: "target-bonus", points: 1 },
+    "alliance-bonus": { type: "alliance-bonus", points: 1 }, "chaos-bonus": { type: "chaos-bonus", points: 1 },
+    "failed-risk-cost": { type: "failed-risk-cost", points: 1 }, "protection-bonus": { type: "protection-bonus", points: 1 },
+    "cooperation-bonus": { type: "cooperation-bonus", points: 1 },
+  };
+  const definition = { ...HOUSE_RULES.find((rule) => rule.id === id)!, effect: effects[id] };
+  room.session!.offeredRules = [definition];
+  act(room, winner, "select-rule", id);
+}
 function setGame(room: Room, gameId: string, number = 1) {
   if (!room.session) act(room, "p0", "start");
   room.session!.gameNumber = number;
@@ -299,6 +313,24 @@ describe("authoritative party session engine", () => {
     expect(() => act(room, "p1", "open-rule-selection")).toThrow("winner");
     act(room, "p0", "open-rule-selection");
     expect(() => act(room, "p1", "select-rule", "double-down")).toThrow("winner");
+  });
+  it("offers at most four rules compatible with upcoming games and scores targeted-play rules", () => {
+    const room = makeRoom();
+    setGame(room, "split-decision");
+    room.session!.gameSlots = ["split-decision", "pile-on", "group-project", "trust-me", "lifeline", "auction-house"];
+    submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" });
+    act(room, room.session!.ruleWinnerId!, "open-rule-selection");
+    expect(room.session!.offeredRules.length).toBeLessThanOrEqual(4);
+    expect(room.session!.offeredRules.every((rule) => rule.compatibleFamilies?.includes("*") || rule.compatibleFamilies?.some((family) => ["targeting", "shared-effort", "trust", "protection-vote", "auction"].includes(family)))).toBe(true);
+    room.session!.offeredRules = [{ ...HOUSE_RULES.find((rule) => rule.id === "target-bonus")!, effect: { type: "target-bonus", points: 1 } }];
+    act(room, room.session!.ruleWinnerId!, "select-rule", "target-bonus");
+    act(room, "p0", "continue-session");
+    act(room, "p0", "begin-game");
+    submissions(room, { p0: "cash", p1: "target:p0", p2: "target:p0" });
+    const result = room.session!.round!.result!;
+    expect(result.events.some((event) => event.type === "target")).toBe(true);
+    expect(result.modifiers.p1).toContain("Pick a Side +1");
+    expect(result.modifiers.p2).toContain("Pick a Side +1");
   });
   it("resolves timed out rounds and reconnects with the same identity", () => {
     const room = makeRoom(2); setGame(room, "split-decision"); act(room, "p0", "submit", "RED");

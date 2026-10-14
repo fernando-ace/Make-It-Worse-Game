@@ -7,15 +7,22 @@ export type HouseRuleEffect =
   | { type: "last-place-bonus"; points: number }
   | { type: "bounty"; points: number; targetId: string }
   | { type: "forced-first"; playerId: string }
-  | { type: "score-floor"; playerId: string };
+  | { type: "score-floor"; playerId: string }
+  | { type: "target-bonus"; points: number }
+  | { type: "alliance-bonus"; points: number }
+  | { type: "chaos-bonus"; points: number }
+  | { type: "failed-risk-cost"; points: number }
+  | { type: "protection-bonus"; points: number }
+  | { type: "cooperation-bonus"; points: number };
 
 export type HouseRule = {
-  id: "underdog" | "bounty" | "double-down" | "first-commit" | "safety-net";
+  id: "underdog" | "bounty" | "double-down" | "first-commit" | "safety-net" | "target-bonus" | "alliance-bonus" | "chaos-bonus" | "failed-risk-cost" | "protection-bonus" | "cooperation-bonus";
   name: string;
   description: string;
   activationPoint: "next-game";
   effect: HouseRuleEffect;
   canStack: boolean;
+  compatibleFamilies?: string[];
 };
 
 export type GameOption = { id: string; label: string; detail?: string };
