@@ -155,6 +155,16 @@ describe("authoritative party session engine", () => {
     expect(room.session?.round?.result?.modifiers.p0).toContain("Soft Landing +1");
     expect(snapshot(room, "p1", now + 1).session?.round?.firstCommitPlayerId).toBe("p2");
   });
+  it("gives game six a modest earned-only comeback bonus without replacing session scores", () => {
+    const room = makeRoom(5); setGame(room, "split-decision", 6);
+    room.session!.scores = { p0: 8, p1: 6, p2: 5, p3: 3, p4: 3 };
+    submissions(room, { p0: "RED", p1: "RED", p2: "RED", p3: "BLUE", p4: "BLUE" });
+    expect(room.session?.round?.result?.basePoints).toEqual({ p0: 0, p1: 0, p2: 0, p3: 2, p4: 2 });
+    expect(room.session?.round?.result?.points).toEqual({ p0: 0, p1: 0, p2: 0, p3: 4, p4: 4 });
+    expect(room.session?.round?.result?.modifiers.p3).toContain("Finale comeback +2");
+    expect(room.session?.round?.result?.modifiers.p4).toContain("Finale comeback +2");
+    expect(room.session?.scores).toEqual({ p0: 8, p1: 6, p2: 5, p3: 7, p4: 7 });
+  });
   it("persists scores and rules across the session and derives awards only from recorded events", () => {
     const room = makeRoom(); setGame(room, "split-decision");
     submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" }); selectRule(room, "double-down");
@@ -169,7 +179,7 @@ describe("authoritative party session engine", () => {
     }
     expect(room.session?.history.map((item) => item.minigameId)).toEqual(room.session?.gameSlots);
     expect(room.session?.history[1].rules).toHaveLength(1);
-    expect(room.session?.round?.result?.modifiers.p0).toContain(`Double Down ×32: ${room.session!.round!.result!.basePoints.p0} → ${room.session!.round!.result!.basePoints.p0 * 32}`);
+    expect(room.session?.round?.result?.modifiers.p0).toContain(`Double Down ×4: ${room.session!.round!.result!.basePoints.p0} → ${room.session!.round!.result!.basePoints.p0 * 4}`);
     act(room, "p0", "continue-session");
     expect(room.session?.phase).toBe("final-results");
     expect(room.session?.awards.some((award) => award.id === "best-read")).toBe(true);

@@ -8,7 +8,7 @@ export { MINIGAMES, registerMinigame };
 export const HOUSE_RULES: Omit<HouseRule, "effect">[] = [
   { id: "underdog", name: "Underdog", description: "The player in last place earns bonus points whenever they score.", activationPoint: "next-game", canStack: false },
   { id: "bounty", name: "Bounty", description: "Outscore the marked player's base points to earn a bonus.", activationPoint: "next-game", canStack: false },
-  { id: "double-down", name: "Double Down", description: "Double points scored in each later game.", activationPoint: "next-game", canStack: true },
+  { id: "double-down", name: "Double Down", description: "Double points scored in each later game, stacking up to ×4.", activationPoint: "next-game", canStack: true },
   { id: "first-commit", name: "First on the Record", description: "The marked player must lock in before everyone else.", activationPoint: "next-game", canStack: false },
   { id: "safety-net", name: "Soft Landing", description: "The marked player cannot lose points in later games.", activationPoint: "next-game", canStack: false },
 ];
@@ -46,10 +46,10 @@ function chooseOffers(session: PartySession, players: Player[]) {
   for (let i = pool.length - 1; i > 0; i--) { const j = randomInt(i + 1); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   session.offeredRules = pool;
 }
-function applyHouseRules(players: Player[], scores: Record<string, number>, rules: HouseRule[], game: Omit<MinigameResolution, "points" | "modifiers" | "optionCounts">, optionCounts: Record<string, number>): MinigameResolution {
+function applyHouseRules(players: Player[], scores: Record<string, number>, rules: HouseRule[], game: Omit<MinigameResolution, "points" | "modifiers" | "optionCounts">, optionCounts: Record<string, number>, finale = false): MinigameResolution {
   const points: Record<string, number> = {};
   const modifiers: Record<string, string[]> = Object.fromEntries(players.map((player) => [player.id, []]));
-  const multiplier = rules.reduce((total, rule) => rule.effect.type === "score-multiplier" ? total * rule.effect.multiplier : total, 1);
+  const multiplier = rules.reduce((total, rule) => rule.effect.type === "score-multiplier" ? Math.min(4, total * rule.effect.multiplier) : total, 1);
   for (const player of players) {
     const original = game.basePoints[player.id] ?? 0;
     const protectedPlayer = rules.some((rule) => rule.effect.type === "score-floor" && rule.effect.playerId === player.id);
@@ -74,6 +74,15 @@ function applyHouseRules(players: Player[], scores: Record<string, number>, rule
       modifiers[player.id].push(`Bounty +${rule.effect.points}`);
     }
   }
+  // The final game gives trailing players a small earned-only comeback boost.
+  // The whole session score remains intact and still determines the winner.
+  if (finale) {
+    const lastPlaceScore = Math.min(...players.map((player) => scores[player.id] ?? 0));
+    for (const player of players) if ((scores[player.id] ?? 0) === lastPlaceScore && (game.basePoints[player.id] ?? 0) > 0) {
+      points[player.id] += 2;
+      modifiers[player.id].push("Finale comeback +2");
+    }
+  }
   const reasons = Object.fromEntries(players.map((player) => {
     const gameReason = game.reasons[player.id] ?? "No pick before time ran out.";
     const modifierText = modifiers[player.id].length ? ` ${modifiers[player.id].join(" · ")}.` : "";
@@ -90,7 +99,7 @@ function resolveRound(room: Room, now: number) {
   const definition = MINIGAMES[round.minigameId];
   const resolution = definition.resolve({ players: room.players, submissions: round.submissions, scores: session.scores, config: round.config });
   const counts = Object.fromEntries(round.config.options.map(({ id }) => [id, Object.values(round.submissions).filter((choice) => choice === id).length]));
-  round.result = applyHouseRules(room.players, session.scores, session.activeRules, resolution, counts);
+  round.result = applyHouseRules(room.players, session.scores, session.activeRules, resolution, counts, round.number === SESSION_GAME_COUNT);
   for (const [playerId, earned] of Object.entries(round.result.points)) session.scores[playerId] = Math.max(0, (session.scores[playerId] ?? 0) + earned);
   session.phase = "game-results";
   session.ruleWinnerId = selectWinner(room.players, round);
