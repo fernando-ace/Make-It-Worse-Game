@@ -38,7 +38,7 @@ test("two friends join, play Split Decision, and see the tie reveal", async ({ b
       expect(size.scroll).toBeLessThanOrEqual(size.width);
     }
     await host.getByRole("button", { name: "Start the party" }).click();
-    await host.getByRole("button", { name: "Start round 1" }).click();
+    await host.getByRole("button", { name: "Start game 1" }).click();
     await host.getByRole("button", { name: /RED/ }).click();
     await expect(host.getByText(/Your choice is locked/)).toBeVisible();
     await expect(guest.locator(".reveal-list")).toHaveCount(0);

@@ -31,9 +31,9 @@ test.afterEach(async () => {
   }
 });
 
-test("real multiplayer Split Decision reveals choices, applies House Rules, and updates standings", async ({ browser }) => {
+test("three players finish a six-game session with persistent scoring, rules, privacy, and reconnect", async ({ browser }) => {
   test.skip(!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || !process.env.SUPABASE_SECRET_KEY, "Requires the configured real Supabase project.");
-  test.setTimeout(180000);
+  test.setTimeout(360000);
   contexts = await Promise.all([browser.newContext(), browser.newContext(), browser.newContext()]);
   const pages = await Promise.all(contexts.map((context) => context.newPage()));
   const [host, guestOne, guestTwo] = pages;
@@ -50,7 +50,7 @@ test("real multiplayer Split Decision reveals choices, applies House Rules, and 
   await Promise.all(pages.map(async (page, index) => {
     await page.setViewportSize({ width: index === 1 ? 390 : 1365, height: 900 });
     await page.goto("/", { waitUntil: "domcontentloaded", timeout: 60000 });
-    await expect(page.locator(".connection")).toHaveText("Connected");
+    await expect(page.locator(".connection")).toHaveText("Connected", { timeout: 120000 });
     await expect(page.getByLabel("Your name")).toBeVisible();
     await page.getByLabel("Your name").fill(["Host", "Alex", "Blair"][index]);
   }));
@@ -65,7 +65,7 @@ test("real multiplayer Split Decision reveals choices, applies House Rules, and 
   }
   await expect(host.locator(".player-row")).toHaveCount(3);
   await host.getByRole("button", { name: "Start the party" }).click();
-  await host.getByRole("button", { name: "Start round 1" }).click();
+  await host.getByRole("button", { name: "Start game 1" }).click();
   await host.getByRole("button", { name: /RED/ }).click();
   await expect.poll(() => latest.get(guestOne)?.session?.round?.myChoice).toBeNull();
   expect(latest.get(guestOne)?.session?.round).not.toHaveProperty("submissions");
@@ -77,18 +77,41 @@ test("real multiplayer Split Decision reveals choices, applies House Rules, and 
   await host.getByRole("button", { name: "Choose a House Rule" }).click();
   await expect(guestOne.locator(".rule-card")).toHaveCount(3);
   await expect(guestOne.getByRole("button", { name: /Double Down/ })).toBeDisabled();
-  await expect(guestOne.locator(".rule-card").filter({ hasText: "Bounty" })).toContainText("Bounty target:");
+  await expect(guestOne.locator(".rule-card").filter({ hasText: "Bounty" })).toContainText("Marked player:");
   await host.getByRole("button", { name: /Double Down/ }).click();
   await expect(guestTwo.locator(".house-rule-panel")).toContainText("Double Down");
-  await host.getByRole("button", { name: "Start round 2" }).click();
+  await expect(host.locator(".intermission")).toContainText("SESSION 1/6");
+  await host.getByRole("button", { name: "Start game 2" }).click();
   await expect(guestOne.locator(".active-rule")).toContainText("Double Down");
+  await guestTwo.reload();
+  await expect(guestTwo.locator(".connection")).toHaveText("Connected");
+  await expect(guestTwo.getByRole("heading", { name: "Pick your side." })).toBeVisible();
+  await expect.poll(() => latest.get(guestTwo)?.session?.round?.myChoice).toBeNull();
+  expect(JSON.stringify(latest.get(guestTwo)?.session?.round)).not.toContain("submissions");
   await host.getByRole("button", { name: /RED/ }).click();
   await guestOne.getByRole("button", { name: /BLUE/ }).click();
   await guestTwo.getByRole("button", { name: /BLUE/ }).click();
-  await expect(host.getByText("Party complete", { exact: true })).toBeVisible();
   await expect(host.locator(".reveal-row").filter({ hasText: "Host" })).toContainText("+4");
-  await expect(host.locator(".reveal-row").filter({ hasText: "Host" })).toContainText("doubled to 4");
+  await host.getByRole("button", { name: "Choose a House Rule" }).click();
+  await host.getByRole("button", { name: /Double Down/ }).click();
+  await expect(host.locator(".intermission")).toContainText("SESSION 2/6");
   await expect(host.locator(".standing-row").first()).toContainText("Host");
+  for (let game = 3; game <= 6; game++) {
+    await host.getByRole("button", { name: `Start game ${game}` }).click();
+    await host.getByRole("button", { name: /RED/ }).click();
+    await guestOne.getByRole("button", { name: /BLUE/ }).click();
+    await guestTwo.getByRole("button", { name: /BLUE/ }).click();
+    await expect(host.locator(".reveal-row")).toHaveCount(3);
+    await host.getByRole("button", { name: "Choose a House Rule" }).click();
+    await host.getByRole("button", { name: /Double Down/ }).click();
+    await expect(host.locator(".intermission")).toContainText(`SESSION ${game}/6`);
+    await expect(host.locator(".house-rule-panel")).toContainText("Double Down");
+  }
+  await host.getByRole("button", { name: "See final results" }).click();
+  await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
+  await expect(host.locator(".standing-row").first()).toContainText("Host");
+  const hostId = latest.get(host)?.me;
+  expect(hostId && latest.get(host)?.session?.scores[hostId]).toBeGreaterThan(2);
   for (const page of pages) {
     const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
     expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
