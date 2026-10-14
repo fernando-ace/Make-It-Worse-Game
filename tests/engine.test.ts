@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { apply, join, MINIGAMES, registerMinigame, selectSessionGames, SESSION_GAME_COUNT, snapshot } from "../lib/engine";
+import { apply, join, MINIGAMES, powerOffersFor, registerMinigame, selectSessionGames, SESSION_GAME_COUNT, snapshot } from "../lib/engine";
 import { resolveAwards } from "../lib/games";
-import type { GameEvent, HouseRule, MinigameDefinition, MinigameResolution, Room } from "../lib/types";
+import type { GameEvent, HouseRule, MinigameDefinition, MinigameResolution, PowerId, Room } from "../lib/types";
 
 const now = 1_000_000;
 let actionNumber = 0;
@@ -19,6 +19,10 @@ function setGame(room: Room, gameId: string, number = 1) {
   room.session!.gameConfig = MINIGAMES[gameId].config({ players: room.players, gameNumber: number });
   room.session!.phase = "game-intro";
   act(room, "p0", "begin-game");
+}
+function ensurePowerOffer(room: Room, playerId: string, powerId: PowerId) {
+  let attempt = 0;
+  while (!powerOffersFor(room.session!.seed, room.session!.gameNumber, playerId).includes(powerId)) room.session!.seed = `power-test:${powerId}:${attempt++}`;
 }
 function submissions(room: Room, choices: Record<string, string>) {
   const first = room.session?.round?.firstCommitPlayerId;
@@ -307,40 +311,67 @@ describe("authoritative party session engine", () => {
     const owner = snapshot(room, "p0", now + 1).session!;
     const other = snapshot(room, "p1", now + 2).session!;
     expect(owner.myObjective).toEqual(room.session!.objectives.p0);
+    expect(owner.myPowerOffers).toHaveLength(3);
     expect(owner.myChaos).toBe(2);
     expect(other).not.toHaveProperty("objectives");
     expect(other).not.toHaveProperty("chaos");
     expect(other).not.toHaveProperty("seed");
     expect(other.objectiveReveal).toBeUndefined();
-    act(room, "p0", "use-power", "guard");
+    ensurePowerOffer(room, "p0", "guard"); act(room, "p0", "use-power", "guard");
     expect(snapshot(room, "p0", now + 3).session?.myChaos).toBe(0);
     expect(snapshot(room, "p0", now + 3).session?.myPowers).toHaveLength(1);
     expect(snapshot(room, "p1", now + 3).session?.myPowers).toEqual([]);
     expect(snapshot(room, "p1", now + 3).session?.myChaos).toBe(2);
-    expect(() => act(room, "p0", "use-power", "amplify")).toThrow("already used");
+    expect(() => act(room, "p0", "use-power", "guard")).toThrow("already used");
+  });
+  it("rotates private power offers and reveals scout intel only to the user", () => {
+    const room = makeRoom(); setGame(room, "split-decision");
+    const offers = powerOffersFor(room.session!.seed, 1, "p0");
+    expect(powerOffersFor(room.session!.seed, 1, "p0")).toEqual(offers);
+    expect(offers).toHaveLength(3);
+    ensurePowerOffer(room, "p1", "scout");
+    expect(() => act(room, "p1", "use-power", "scout:p0")).toThrow("has not locked in");
+    act(room, "p0", "submit", "RED");
+    act(room, "p1", "use-power", "scout:p0");
+    expect(snapshot(room, "p1", now + 1).session?.myIntel).toEqual({ playerId: "p0", playerName: "Player 0", choice: "RED" });
+    expect(snapshot(room, "p0", now + 1).session?.myIntel).toBeNull();
+    expect(snapshot(room, "p2", now + 1).session?.myIntel).toBeNull();
+    expect(snapshot(room, "p2", now + 1).session?.round?.myChoice).toBeNull();
+  });
+  it("applies targeted offense before protection in a deterministic power order", () => {
+    const room = makeRoom(); setGame(room, "split-decision");
+    room.session!.chaos = { p0: 8, p1: 8, p2: 8 };
+    ensurePowerOffer(room, "p0", "hex"); act(room, "p0", "use-power", "hex:p2");
+    ensurePowerOffer(room, "p1", "bodyguard"); act(room, "p1", "use-power", "bodyguard:p2");
+    submissions(room, { p0: "RED", p1: "BLUE", p2: "RED" });
+    expect(room.session?.round?.result?.basePoints.p2).toBe(-1);
+    expect(room.session?.round?.result?.points.p2).toBe(0);
+    expect(room.session?.round?.result?.modifiers.p2).toEqual(expect.arrayContaining(["Bad Omen −2 from Player 0", "Take the Hit +3"]));
   });
   it("applies powers after House Rules and prevents duplicate or unaffordable spending", () => {
     const room = makeRoom(); setGame(room, "split-decision", 2);
     room.session!.activeRules = [{ id: "double-down", name: "Double Down", description: "Double scores.", activationPoint: "next-game", canStack: true, effect: { type: "score-multiplier", multiplier: 2 } }];
-    act(room, "p0", "use-power", "guard");
+    ensurePowerOffer(room, "p0", "guard"); act(room, "p0", "use-power", "guard");
     expect(() => act(room, "p0", "use-power", "guard", now, "guard-again" )).toThrow("already used");
     room.session!.chaos.p1 = 1;
+    ensurePowerOffer(room, "p1", "bounty"); room.session!.chaos.p1 = 1;
     expect(() => act(room, "p1", "use-power", "bounty:p0", now, "poor-bounty")).toThrow("Not enough Chaos");
     submissions(room, { p0: "RED", p1: "RED", p2: "BLUE" });
     expect(room.session?.round?.result?.basePoints.p0).toBe(-1);
     expect(room.session?.round?.result?.points.p0).toBe(0);
     expect(room.session?.round?.result?.modifiers.p0).toContain("Double Down ×2: -1 → -2");
     expect(room.session?.round?.result?.modifiers.p0).toContain("Soft Landing power +2");
-    expect(room.session?.round?.result?.events).toContainEqual({ type: "power", playerId: "p0", powerId: "guard" });
+    expect(room.session?.round?.result?.events).toContainEqual(expect.objectContaining({ type: "power", playerId: "p0", powerId: "guard", outcome: "success" }));
     expect(room.session?.chaos.p0).toBe(1);
   });
   it("tracks low-score and power objectives from resolved round events", () => {
     const room = makeRoom(); setGame(room, "trust-me", 2);
     room.session!.objectives.p0 = { id: "quiet-climber", title: "Quiet Climber", description: "Score below the high score.", progress: 0, target: 2, completed: false, reward: 4 };
     room.session!.objectives.p2 = { id: "power-player", title: "Spend with Purpose", description: "Use powers.", progress: 0, target: 2, completed: false, reward: 4 };
-    act(room, "p2", "use-power", "amplify");
+    ensurePowerOffer(room, "p2", "amplify"); act(room, "p2", "use-power", "amplify");
     submissions(room, { p0: "pocket", p1: "pool", p2: "swipe" });
-    expect(room.session?.round?.result?.events).toContainEqual({ type: "round-score", playerId: "p0", points: 1, highest: false });
+    expect(room.session?.round?.result?.events).toContainEqual(expect.objectContaining({ type: "round-score", playerId: "p0", points: 1, highest: false, gameNumber: 2 }));
+    expect(room.session?.round?.result?.events).toContainEqual(expect.objectContaining({ type: "chaos-earned", playerId: "p0", amount: expect.any(Number) }));
     expect(room.session?.round?.result?.events.some((event) => event.type === "power" && event.playerId === "p2")).toBe(true);
     expect(room.session?.objectives.p0.progress).toBe(1);
     expect(room.session?.objectives.p2.progress).toBe(1);
@@ -355,8 +386,8 @@ describe("authoritative party session engine", () => {
     act(room, "p0", "continue-session");
     const result = snapshot(room, "p1", now + 1).session!;
     expect(result.phase).toBe("final-results");
-    expect(result.objectiveReveal?.p0).toMatchObject({ completed: true, reward: 4 });
-    expect(room.session?.scores.p0).toBeGreaterThanOrEqual(before + 4);
+    expect(result.objectiveReveal?.p0).toMatchObject({ completed: true, reward: objective.reward });
+    expect(room.session?.scores.p0).toBeGreaterThanOrEqual(before + objective.reward);
     expect(() => act(room, "p0", "continue-session", undefined, now, "extra-finalize")).toThrow("intermission");
   });
   it("starts a different, clean six-game run in the same room", () => {

@@ -9,12 +9,14 @@ describe("secret objective registry", () => {
     const slots = ["split-decision", "bluff-check", "escalation-ladder", "favor-bank", "group-tab", "hot-potato"];
     const first = assignObjectives("seed-123", players, slots);
     expect(assignObjectives("seed-123", players, slots)).toEqual(first);
+    expect(new Set(Object.values(first).map((objective) => objective.id)).size).toBe(players.length);
     for (const objective of Object.values(first)) {
       const definition = OBJECTIVES.find((item) => item.id === objective.id)!;
       expect(definition.compatibleGames.some((id) => slots.includes(id))).toBe(true);
       expect(objective.progress).toBe(0);
       expect(objective.completed).toBe(false);
-      expect(objective.reward).toBe(4);
+      expect(objective.reward).toBeGreaterThanOrEqual(3);
+      expect(objective.reward).toBeLessThanOrEqual(4);
     }
   });
 
@@ -27,6 +29,8 @@ describe("secret objective registry", () => {
     const afterOne = state.progress;
     expect(afterOne).toBe(1);
     advanceObjectives({ a: state }, Array.from({ length: state.target }, () => event), gameId);
+    expect(state.progress).toBe(1);
+    advanceObjectives({ a: state }, [event], definition.compatibleGames[1]);
     expect(state.completed).toBe(true);
     expect(state.progress).toBe(state.target);
     advanceObjectives({ a: state }, [event], gameId);

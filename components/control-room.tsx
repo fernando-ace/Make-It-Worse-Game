@@ -54,6 +54,10 @@ function playerHistoryCues(session: NonNullable<Snapshot["session"]>, players: S
     const name = players.find((player) => player.id === repeatTarget[0])?.name ?? "Someone";
     cues.push(`${name} has been targeted ${repeatTarget[1]} times`);
   }
+  const save = events.filter((event) => event.type === "save" && event.successful && event.targetId === me).at(-1);
+  if (save?.type === "save") cues.push(`${players.find((player) => player.id === save.actorId)?.name ?? "Someone"} used a lifeline on you`);
+  const backed = events.filter((event) => event.type === "support" && event.successful && event.targetId === me).at(-1);
+  if (backed?.type === "support") cues.push(`${players.find((player) => player.id === backed.actorId)?.name ?? "Someone"} backed you for the golden ticket`);
   return cues;
 }
 
@@ -81,7 +85,7 @@ function sessionRecap(session: NonNullable<Snapshot["session"]>, players: Snapsh
   const swingPlayer = players.find((player) => player.id === swing?.playerId)?.name;
   const createdRules = session.history.flatMap((game) => game.selectedRule ? [{ game: game.number, rule: game.selectedRule }] : []);
   const powers = events.filter((event) => event.type === "power");
-  const powerNames: Record<string, string> = { guard: "Soft Landing", amplify: "Turn It Up", bounty: "Side Bet" };
+  const powerNames: Record<string, string> = { guard: "Soft Landing", amplify: "Turn It Up", bounty: "Side Bet", bodyguard: "Take the Hit", hex: "Bad Omen", comeback: "Second Wind", pickpocket: "Pocket Change", contrarian: "Lone Wolf", scout: "Read Receipt" };
   const powerSummary = [...new Set(powers.map((event) => event.type === "power" ? event.powerId : ""))].map((id) => `${powerNames[id] ?? id}: ${powers.filter((event) => event.type === "power" && event.powerId === id).length} use${powers.filter((event) => event.type === "power" && event.powerId === id).length === 1 ? "" : "s"}`);
   const ruleInfluence = new Map<string, number>();
   for (const game of session.history) for (const rule of game.rules) {
@@ -116,6 +120,7 @@ function sessionRecap(session: NonNullable<Snapshot["session"]>, players: Snapsh
 
 function revealMoments(result: MinigameResolution, players: Snapshot["players"]) {
   const name = (id: string) => players.find((player) => player.id === id)?.name ?? "Someone";
+  const powerName: Record<string, string> = { guard: "Soft Landing", amplify: "Turn It Up", bounty: "Side Bet", bodyguard: "Take the Hit", hex: "Bad Omen", comeback: "Second Wind", pickpocket: "Pocket Change", contrarian: "Lone Wolf", scout: "Read Receipt" };
   const moments = result.events.flatMap((event) => {
     if (event.type === "target") return [`${name(event.actorId)} called out ${name(event.targetId)}`];
     if (event.type === "gamble") return [`${name(event.playerId)} ${event.result === "won" ? "won" : "lost"} the gamble`];
@@ -125,7 +130,10 @@ function revealMoments(result: MinigameResolution, players: Snapshot["players"])
     if (event.type === "alliance" && event.mutual && event.playerId < event.targetId) return [`${name(event.playerId)} and ${name(event.targetId)} made a pact`];
     if (event.type === "alliance" && !event.mutual) return [`${name(event.playerId)} reached for ${name(event.targetId)}; it wasn't mutual`];
     if (event.type === "betrayed") return [`${name(event.targetId)} left ${name(event.playerId)} holding it`];
-    if (event.type === "power") return [`${name(event.playerId)} used ${event.powerId === "guard" ? "Soft Landing" : event.powerId === "amplify" ? "Turn It Up" : "Side Bet"}`];
+    if (event.type === "save" && event.successful) return [`${name(event.actorId)} saved ${name(event.targetId)}`];
+    if (event.type === "support" && event.successful) return [`${name(event.actorId)} backed ${name(event.targetId)}`];
+    if (event.type === "contribution") return [`${name(event.playerId)} ${event.effort === 2 ? "carried" : "helped with"} the project${event.successful ? " that cleared" : " despite missing"} the bar`];
+    if (event.type === "power") return [event.outcome === "info" ? `${name(event.playerId)} used ${powerName[event.powerId]} on ${name(event.targetId ?? "")}` : event.outcome === "success" ? `${powerName[event.powerId]} worked for ${name(event.playerId)}` : `${powerName[event.powerId]} did not trigger for ${name(event.playerId)}`];
     return [];
   });
   for (const [playerId, modifiers] of Object.entries(result.modifiers)) {

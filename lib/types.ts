@@ -44,10 +44,11 @@ export type GameEvent =
   | { type: "support"; actorId: string; targetId: string; successful: boolean }
   | { type: "contribution"; playerId: string; effort: number; successful: boolean }
   | { type: "betrayed"; playerId: string; targetId: string }
-  | { type: "power"; playerId: string; powerId: PowerId }
-  | { type: "round-score"; playerId: string; points: number; highest: boolean };
-export type ObjectiveState = { id: string; title: string; description: string; progress: number; target: number; completed: boolean; reward: number };
-export type PowerId = "guard" | "amplify" | "bounty";
+  | { type: "power"; playerId: string; powerId: PowerId; targetId?: string; outcome?: "success" | "miss" | "info" }
+  | { type: "chaos-earned"; playerId: string; amount: number }
+  | { type: "round-score"; playerId: string; points: number; highest: boolean; gameNumber: number };
+export type ObjectiveState = { id: string; title: string; description: string; progress: number; target: number; completed: boolean; reward: number; relatedPlayerId?: string; progressedGameIds?: string[] };
+export type PowerId = "guard" | "amplify" | "bounty" | "bodyguard" | "hex" | "comeback" | "pickpocket" | "contrarian" | "scout";
 export type ActivePower = { id: PowerId; actorId: string; targetId?: string; gameNumber: number };
 export type MinigameResolution = {
   choices: Record<string, string>;
@@ -100,6 +101,6 @@ export type Snapshot = {
   id: string; code: string; hostId: string; revision: number; players: Player[]; me: string; serverNow: number;
   session: (Omit<PartySession, "round" | "seed" | "objectives" | "chaos" | "activePowers"> & {
     round: (Omit<PartyRound, "submissions"> & { answeredCount: number; myChoice: string | null; submittedIds: string[] }) | null;
-    myObjective: ObjectiveState; myChaos: number; myPowers: ActivePower[]; objectiveReveal?: Record<string, ObjectiveState>;
+    myObjective: ObjectiveState; myChaos: number; myPowers: ActivePower[]; myPowerOffers: PowerId[]; myIntel: { playerId: string; playerName: string; choice: string } | null; objectiveReveal?: Record<string, ObjectiveState>;
   }) | null;
 };

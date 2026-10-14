@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Action, HouseRule, MinigameResolution, PartyRound, PartySession, Player, Room, Snapshot } from "./types";
 import { MINIGAMES, resolveAwards, registerMinigame } from "./games";
 import { assignObjectives, advanceObjectives } from "./objectives";
-import { POWERS } from "./powers";
+import { POWERS, powerOffersFor } from "./powers";
 import { seededShuffle } from "./seed";
 import { directSessionGames } from "./director";
 
@@ -19,6 +19,8 @@ export const HOUSE_RULES: Omit<HouseRule, "effect">[] = [
   { id: "first-commit", name: "First on the Record", description: "The marked player must lock in before everyone else.", activationPoint: "next-game", canStack: false },
   { id: "safety-net", name: "Soft Landing", description: "The marked player cannot lose points in later games.", activationPoint: "next-game", canStack: false },
 ];
+
+export { powerOffersFor } from "./powers";
 
 export function selectSessionGames(seed: string): string[] {
   return directSessionGames(seed, MINIGAMES);
@@ -110,20 +112,49 @@ function applyHouseRules(players: Player[], scores: Record<string, number>, rule
     }
   }
   const beforePowers = { ...points };
-  for (const power of [...powers].filter((item) => item.gameNumber === gameNumber).sort((a, b) => a.actorId.localeCompare(b.actorId) || a.id.localeCompare(b.id))) {
+  const priority: Record<string, number> = { hex: 0, pickpocket: 1, guard: 2, bodyguard: 2, bounty: 3, amplify: 4, comeback: 4, contrarian: 4, scout: 5 };
+  for (const power of [...powers].filter((item) => item.gameNumber === gameNumber).sort((a, b) => (priority[a.id] ?? 9) - (priority[b.id] ?? 9) || a.actorId.localeCompare(b.actorId) || a.id.localeCompare(b.id))) {
     const actor = points[power.actorId];
     if (actor === undefined) continue;
+    let outcome: "success" | "miss" | "info" = "miss";
     if (power.id === "guard" && actor < 0) {
       modifiers[power.actorId].push(`Soft Landing power +${Math.abs(actor)}`);
       points[power.actorId] = 0;
+      outcome = "success";
     } else if (power.id === "amplify" && actor > 0) {
       points[power.actorId]++;
       modifiers[power.actorId].push("Turn It Up +1");
+      outcome = "success";
     } else if (power.id === "bounty" && power.targetId && beforePowers[power.targetId] !== undefined && beforePowers[power.actorId] > beforePowers[power.targetId]) {
       points[power.actorId] += 2;
       modifiers[power.actorId].push(`Side Bet +2 over ${players.find((player) => player.id === power.targetId)?.name ?? "marked player"}`);
+      outcome = "success";
+    } else if (power.id === "hex" && power.targetId && points[power.targetId] !== undefined) {
+      points[power.targetId] -= 2;
+      modifiers[power.targetId].push(`Bad Omen −2 from ${players.find((player) => player.id === power.actorId)?.name ?? "a player"}`);
+      outcome = "success";
+    } else if (power.id === "pickpocket" && power.targetId && points[power.targetId] > 0) {
+      points[power.actorId]++;
+      points[power.targetId]--;
+      modifiers[power.actorId].push("Pocket Change +1 stolen");
+      modifiers[power.targetId].push(`Pocket Change −1 to ${players.find((player) => player.id === power.actorId)?.name ?? "a player"}`);
+      outcome = "success";
+    } else if (power.id === "bodyguard" && power.targetId && points[power.targetId] < 0) {
+      modifiers[power.targetId].push(`Take the Hit +${Math.abs(points[power.targetId])}`);
+      points[power.targetId] = 0;
+      outcome = "success";
+    } else if (power.id === "comeback" && actor > 0 && (scores[power.actorId] ?? 0) === Math.min(...players.map((player) => scores[player.id] ?? 0))) {
+      points[power.actorId] += 2;
+      modifiers[power.actorId].push("Second Wind +2");
+      outcome = "success";
+    } else if (power.id === "contrarian" && power.actorId in game.choices && optionCounts[game.choices[power.actorId]] === 1) {
+      points[power.actorId] += 2;
+      modifiers[power.actorId].push("Lone Wolf +2");
+      outcome = "success";
+    } else if (power.id === "scout") {
+      outcome = "info";
     }
-    game.events.push({ type: "power", playerId: power.actorId, powerId: power.id });
+    game.events.push({ type: "power", playerId: power.actorId, powerId: power.id, ...(power.targetId ? { targetId: power.targetId } : {}), outcome });
   }
   if (gameNumber === 5) {
     const chaosPlayers = new Set(game.events.flatMap((event) => event.type === "chaos" ? [event.playerId] : []));
@@ -165,14 +196,15 @@ function resolveRound(room: Room, now: number) {
   const counts = Object.fromEntries(round.config.options.map(({ id }) => [id, Object.values(round.submissions).filter((choice) => choice === id).length]));
   round.result = applyHouseRules(room.players, session.scores, session.activeRules, resolution, counts, round.number, session.activePowers);
   const highScore = Math.max(...room.players.map((player) => round.result!.points[player.id] ?? 0));
-  for (const player of room.players) round.result.events.push({ type: "round-score", playerId: player.id, points: round.result.points[player.id] ?? 0, highest: (round.result.points[player.id] ?? 0) === highScore });
-  advanceObjectives(session.objectives, round.result.events, round.minigameId);
+  for (const player of room.players) round.result.events.push({ type: "round-score", playerId: player.id, points: round.result.points[player.id] ?? 0, highest: (round.result.points[player.id] ?? 0) === highScore, gameNumber: round.number });
   for (const [playerId, earned] of Object.entries(round.result.points)) session.scores[playerId] = Math.max(0, (session.scores[playerId] ?? 0) + earned);
   for (const player of room.players) {
     if (!Object.hasOwn(round.submissions, player.id)) continue;
     const earnings = Math.min(3, 1 + Math.floor(Math.max(0, round.result.points[player.id] ?? 0) / 3));
     session.chaos[player.id] = Math.min(8, (session.chaos[player.id] ?? 0) + earnings);
+    round.result.events.push({ type: "chaos-earned", playerId: player.id, amount: earnings });
   }
+  advanceObjectives(session.objectives, round.result.events, round.minigameId);
   session.scoreProgression.push(structuredClone(session.scores));
   session.activePowers = [];
   session.phase = "game-results";
@@ -259,13 +291,17 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
       if (typeof action.value !== "string") throw new Error("Choose a power shown");
       const [id, targetId] = action.value.split(":");
       if (!Object.hasOwn(POWERS, id)) throw new Error("Choose a power shown");
-      if (POWERS[id as keyof typeof POWERS].targetRequired && (!targetId || targetId === uid || !room.players.some((candidate) => candidate.id === targetId))) throw new Error("Choose another player for the side bet");
-      if (!POWERS[id as keyof typeof POWERS].targetRequired && targetId) throw new Error("Choose a power shown");
+      const powerId = id as keyof typeof POWERS;
+      const power = POWERS[powerId];
+      if (!powerOffersFor(session.seed, session.gameNumber, uid).includes(powerId)) throw new Error("That power is not in your current offer");
+      if (power.targetRequired && (!targetId || targetId === uid || !room.players.some((candidate) => candidate.id === targetId))) throw new Error("Choose another player for this power");
+      if (power.targetableAfterCommit && targetId && !Object.hasOwn(session.round.submissions, targetId)) throw new Error("That player has not locked in a choice yet");
+      if (!power.targetRequired && targetId) throw new Error("Choose a power shown");
       if (session.activePowers.some((power) => power.actorId === uid && power.gameNumber === session.gameNumber)) throw new Error("You already used a power this game");
-      const cost = POWERS[id as keyof typeof POWERS].cost;
+      const cost = power.cost;
       if ((session.chaos[uid] ?? 0) < cost) throw new Error("Not enough Chaos. Earn more by playing rounds.");
       session.chaos[uid] -= cost;
-      session.activePowers.push({ id: id as keyof typeof POWERS, actorId: uid, ...(targetId ? { targetId } : {}), gameNumber: session.gameNumber });
+      session.activePowers.push({ id: powerId, actorId: uid, ...(targetId ? { targetId } : {}), gameNumber: session.gameNumber });
       break;
     }
     case "select-rule": {
@@ -304,12 +340,16 @@ export function snapshot(room: Room, uid: string, now: number): Snapshot {
       const myObjective = structuredClone(publicSession.objectives[uid]);
       const myChaos = publicSession.chaos[uid] ?? 0;
       const myPowers = publicSession.activePowers.filter((power) => power.actorId === uid);
+      const myPowerOffers = powerOffersFor(session.seed, session.gameNumber, uid);
+      const scout = session.phase === "active-game" ? session.activePowers.find((power) => power.actorId === uid && power.id === "scout") : undefined;
+      const scoutedChoice = scout?.targetId ? session.round?.submissions[scout.targetId] : undefined;
+      const myIntel = scout?.targetId && scoutedChoice ? { playerId: scout.targetId, playerName: room.players.find((player) => player.id === scout.targetId)?.name ?? "Player", choice: scoutedChoice } : null;
       const objectiveReveal = session.phase === "final-results" ? structuredClone(publicSession.objectives) : undefined;
       delete (publicSession as unknown as Record<string, unknown>).seed;
       delete (publicSession as unknown as Record<string, unknown>).objectives;
       delete (publicSession as unknown as Record<string, unknown>).chaos;
       delete (publicSession as unknown as Record<string, unknown>).activePowers;
-      return { ...publicSession, myObjective, myChaos, myPowers, ...(objectiveReveal ? { objectiveReveal } : {}), round: session.round ? {
+      return { ...publicSession, myObjective, myChaos, myPowers, myPowerOffers, myIntel, ...(objectiveReveal ? { objectiveReveal } : {}), round: session.round ? {
       number: session.round.number, minigameId: session.round.minigameId, startedAt: session.round.startedAt, deadlineAt: session.round.deadlineAt, config: structuredClone(session.round.config),
       firstCommitPlayerId: session.round.firstCommitPlayerId, result: session.round.result ? structuredClone(session.round.result) : null, answeredCount: Object.keys(session.round.submissions).length,
       myChoice: session.round.submissions[uid] ?? null, submittedIds: session.phase === "active-game" ? Object.keys(session.round.submissions) : [],

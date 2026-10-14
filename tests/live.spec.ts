@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { existsSync } from "node:fs";
 import type { GameOption, Snapshot } from "../lib/types";
 import { MINIGAMES } from "../lib/games";
+import { POWERS } from "../lib/powers";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 let contexts: BrowserContext[] = [];
@@ -180,8 +181,10 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     }
     if (number === 1) {
       const privateObjective = latest.get(host)!.session!.myObjective;
-      await host.locator(".power-option").filter({ hasText: "Soft Landing" }).getByRole("button", { name: /Use · 2/ }).click();
-      await expect.poll(() => latest.get(host)?.session?.myChaos).toBe(0);
+      const powerId = latest.get(host)!.session!.myPowerOffers.find((id) => !POWERS[id].targetRequired)!;
+      const power = POWERS[powerId];
+      await host.locator(".power-option").filter({ hasText: power.name }).getByRole("button", { name: `Use · ${power.cost}` }).click();
+      await expect.poll(() => latest.get(host)?.session?.myChaos).toBe(2 - power.cost);
       await expect.poll(() => latest.get(host)?.session?.myPowers.length).toBe(1);
       expect(latest.get(host)?.session?.myObjective).toEqual(privateObjective);
       expect(latest.get(guestOne)?.session?.myChaos).toBe(2);
