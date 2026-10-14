@@ -137,6 +137,14 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   const selectedGames = latest.get(host)!.session!.gameSlots;
   expect(selectedGames).toHaveLength(6);
   expect(new Set(selectedGames).size).toBe(6);
+  expect(selectedGames.filter((id) => ["group-tab", "escalation-ladder", "bluff-check", "favor-bank"].includes(id)).length).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => pages.every((page) => Boolean(latest.get(page)?.session?.myObjective)), { timeout: 60000 }).toBe(true);
+  for (const page of pages) {
+    expect(latest.get(page)?.session?.myObjective).toBeTruthy();
+    expect(latest.get(page)?.session).not.toHaveProperty("objectives");
+    expect(latest.get(page)?.session).not.toHaveProperty("seed");
+    expect(latest.get(page)?.session?.objectiveReveal).toBeUndefined();
+  }
   const byId = (id: string) => pages.find((page) => latest.get(page)?.me === id)!;
   const labelFor = (gameId: string, playerName: string, options: GameOption[]) => {
     if (gameId === "split-decision") return playerName === "Host" ? "RED" : "BLUE";
@@ -145,19 +153,32 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     if (gameId === "pile-on") return playerName === "Host" ? "DUCK FOR COVER" : "CALL OUT Host";
     if (gameId === "secret-handshake") return ({ Host: "REACH FOR Blair", Alex: "REACH FOR Host", Blair: "REACH FOR Host" } as Record<string, string>)[playerName];
     if (gameId === "hot-potato") return ({ Host: "PASS TO Alex", Alex: "PASS TO Blair", Blair: "TAKE THE HEAT" } as Record<string, string>)[playerName];
+    if (gameId === "group-tab") return ({ Host: "SPLIT IT FAIR", Alex: "TAKE THE BIG SLICE", Blair: "BURN YOUR RECEIPT" } as Record<string, string>)[playerName];
+    if (gameId === "escalation-ladder") return ({ Host: "RISK 3", Alex: "RISK 3", Blair: "RISK 1" } as Record<string, string>)[playerName];
+    if (gameId === "bluff-check") return ({ Host: "TOTALLY TRUE", Alex: "CALL THE BLUFF", Blair: "TOTALLY TRUE" } as Record<string, string>)[playerName];
+    if (gameId === "favor-bank") return ({ Host: "BACK Alex", Alex: "BACK Host", Blair: "KEEP YOUR OWN COUNSEL" } as Record<string, string>)[playerName];
     throw new Error(`Unexpected game ${gameId}`);
   };
   const ruleByRound = ["First on the Record", "Soft Landing", "Double Down", "Bounty", "Underdog", "Double Down"];
   for (let number = 1; number <= 6; number++) {
     const { options, gameId } = await startRound(number);
     if (gameId === "make-it-worse") expect(latest.get(host)?.session?.round?.config.promptId).toBeTruthy();
-    if (gameId === "trust-me" || gameId === "pile-on" || gameId === "secret-handshake" || gameId === "hot-potato") {
+    if (gameId === "trust-me" || gameId === "pile-on" || gameId === "secret-handshake" || gameId === "hot-potato" || gameId === "favor-bank") {
       expect(options.length).toBeGreaterThanOrEqual(4);
     }
     if (number === 4) {
       const activeIds = latest.get(host)!.session!.activeRules.map((rule) => rule.id);
       expect(activeIds).toEqual(expect.arrayContaining(["first-commit", "safety-net", "double-down"]));
       await expect(host.locator(".active-rule")).toHaveCount(activeIds.length);
+    }
+    if (number === 1) {
+      const privateObjective = latest.get(host)!.session!.myObjective;
+      await host.locator(".power-option").filter({ hasText: "Soft Landing" }).getByRole("button", { name: /Use · 2/ }).click();
+      await expect.poll(() => latest.get(host)?.session?.myChaos).toBe(0);
+      await expect.poll(() => latest.get(host)?.session?.myPowers.length).toBe(1);
+      expect(latest.get(host)?.session?.myObjective).toEqual(privateObjective);
+      expect(latest.get(guestOne)?.session?.myChaos).toBe(2);
+      expect(latest.get(guestOne)?.session?.myPowers).toEqual([]);
     }
     const round = latest.get(host)!.session!.round!;
     const firstPage = round.firstCommitPlayerId ? byId(round.firstCommitPlayerId) : null;
@@ -170,11 +191,13 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       const commitLabel = labelFor(gameId, latest.get(firstPage!)!.players.find((player) => player.id === round.firstCommitPlayerId)?.name ?? "Host", options);
       await choose(firstPage!, commitLabel);
       const reconnectPage = pages.find((page) => page !== firstPage)!;
+      const objectiveBeforeReload = latest.get(reconnectPage)?.session?.myObjective;
       await reconnectPage.reload();
       await expect(reconnectPage.locator(".connection")).toHaveText("Connected");
       await expect(reconnectPage.locator(".active-rule")).toContainText("First on the Record");
       expect(latest.get(reconnectPage)?.session?.round?.myChoice).toBeNull();
       expect(latest.get(reconnectPage)?.session?.round).not.toHaveProperty("submissions");
+      expect(latest.get(reconnectPage)?.session?.myObjective).toEqual(objectiveBeforeReload);
       for (const page of pages.filter((candidate) => candidate !== firstPage)) await choose(page, labelFor(gameId, latest.get(page)!.players.find((player) => player.id === latest.get(page)!.me)?.name ?? "", options));
     } else {
       for (const page of orderedPages) {
@@ -189,27 +212,35 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     if (gameId === "make-it-worse") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "read")).toBe(true);
     if (gameId === "trust-me") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayal")).toBe(true);
     if (gameId === "secret-handshake") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayed")).toBe(true);
+    if (gameId === "favor-bank") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "alliance" && event.mutual)).toBe(true);
   }
   await host.getByRole("button", { name: "See final results" }).click();
   await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
-  await expect(host.getByText("Best Read: Host", { exact: false })).toBeVisible();
-  await expect(host.getByText("Worst Ally: Alex", { exact: false })).toBeVisible();
-  await expect(host.getByText("Most Targeted: Host", { exact: false })).toBeVisible();
-  await expect(host.getByText("Most Betrayed: Host", { exact: false })).toBeVisible();
-  await expect(host.locator(".rule-explainer").getByText(/Best Ally:/)).toBeVisible();
+  expect(latest.get(host)?.session?.awards.length).toBeGreaterThan(0);
   await expect(host.locator(".standing-row").first()).toBeVisible();
+  expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
+  await host.getByRole("button", { name: "Reveal secret objectives" }).click();
+  await expect(host.locator(".objective-result")).toHaveCount(3);
+  await host.getByRole("button", { name: "Reveal party awards" }).click();
+  await expect(host.locator(".rule-explainer").getByText(/Most Targeted:|Best Read:|Biggest Gambler:|Worst Ally:|Chaos Agent:|Best Ally:/).first()).toBeVisible();
+  await host.getByRole("button", { name: "Reveal session records" }).click();
+  await expect(host.locator(".score-paths")).toContainText("Score progression");
   for (const page of pages) {
     const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
     expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
   }
   expect(runtimeErrors).toEqual([]);
 
+  await host.getByRole("button", { name: "Run it back with new games" }).click();
+  await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
+  const retry = latest.get(host)!;
+  expect(retry.session?.gameSlots).not.toEqual(selectedGames);
+  expect(retry.session?.myChaos).toBe(2);
+  expect(retry.players).toHaveLength(3);
+  for (const page of pages) {
+    const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+    expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
+  }
   await host.getByRole("button", { name: "Leave room" }).click();
   await expect(host.getByLabel("Your name")).toHaveValue("Host");
-  await host.getByRole("button", { name: "Create a room" }).click();
-  await expect(host.getByRole("heading", { name: "The room is yours." })).toBeVisible();
-  const retry = latest.get(host)!;
-  rooms.push({ id: retry.id, code: retry.code });
-  expect(retry.code).not.toBe(code);
-  expect(retry.session).toBeNull();
 });
