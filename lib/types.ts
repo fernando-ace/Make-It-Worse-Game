@@ -27,7 +27,12 @@ export type GameEvent =
   | { type: "betrayal"; playerId: string }
   | { type: "chaos"; playerId: string }
   | { type: "alliance"; playerId: string; targetId: string; mutual: boolean }
-  | { type: "betrayed"; playerId: string; targetId: string };
+  | { type: "betrayed"; playerId: string; targetId: string }
+  | { type: "power"; playerId: string; powerId: PowerId }
+  | { type: "round-score"; playerId: string; points: number; highest: boolean };
+export type ObjectiveState = { id: string; title: string; description: string; progress: number; target: number; completed: boolean; reward: number };
+export type PowerId = "guard" | "amplify" | "bounty";
+export type ActivePower = { id: PowerId; actorId: string; targetId?: string; gameNumber: number };
 export type MinigameResolution = {
   choices: Record<string, string>;
   basePoints: Record<string, number>;
@@ -45,6 +50,11 @@ export type PartySession = {
   gameSlots: string[];
   gameConfig: MinigameConfig;
   scores: Record<string, number>;
+  seed: string;
+  objectives: Record<string, ObjectiveState>;
+  chaos: Record<string, number>;
+  activePowers: ActivePower[];
+  scoreProgression: Array<Record<string, number>>;
   round: PartyRound | null;
   activeRules: HouseRule[];
   offeredRules: HouseRule[];
@@ -58,6 +68,10 @@ export type MinigameDefinition = {
   id: string;
   displayName: string;
   instructions: string;
+  interaction?: "read" | "trust" | "target" | "alliance" | "risk" | "negotiate";
+  finaleSuitable?: boolean;
+  difficulty?: 1 | 2 | 3;
+  expansion?: boolean;
   options: (input: { players: Player[]; gameNumber: number }) => GameOption[];
   config: (input: { players: Player[]; gameNumber: number }) => MinigameConfig;
   validate: (choice: string, input: { players: Player[]; playerId: string; config: MinigameConfig }) => boolean;
@@ -67,5 +81,8 @@ export type Room = { id: string; code: string; hostId: string; revision: number;
 export type Action = { type: string; value?: string | number | boolean };
 export type Snapshot = {
   id: string; code: string; hostId: string; revision: number; players: Player[]; me: string; serverNow: number;
-  session: (Omit<PartySession, "round"> & { round: (Omit<PartyRound, "submissions"> & { answeredCount: number; myChoice: string | null; submittedIds: string[] }) | null }) | null;
+  session: (Omit<PartySession, "round" | "seed" | "objectives" | "chaos" | "activePowers"> & {
+    round: (Omit<PartyRound, "submissions"> & { answeredCount: number; myChoice: string | null; submittedIds: string[] }) | null;
+    myObjective: ObjectiveState; myChaos: number; myPowers: ActivePower[]; objectiveReveal?: Record<string, ObjectiveState>;
+  }) | null;
 };

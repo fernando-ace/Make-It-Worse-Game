@@ -1,5 +1,6 @@
 import type { GameEvent, MinigameDefinition, MinigameResolution, Player } from "../types";
 import { MAKE_IT_WORSE_PROMPTS, TRUST_ME_OPTIONS } from "./content";
+import { EXPANSION_GAMES } from "./expansion";
 
 function emptyResult(choices: Record<string, string>, points: Record<string, number>, reasons: Record<string, string>, reveal: string, events: GameEvent[] = []): Omit<MinigameResolution, "points" | "modifiers" | "optionCounts"> {
   return { choices, basePoints: points, reasons, reveal, events };
@@ -7,6 +8,7 @@ function emptyResult(choices: Record<string, string>, points: Record<string, num
 
 export const splitDecision: MinigameDefinition = {
   id: "split-decision",
+  interaction: "read", finaleSuitable: true, difficulty: 1,
   displayName: "Split Decision",
   instructions: "Choose the side you think fewer friends will pick. Your choice stays secret until the reveal.",
   options: () => [{ id: "RED", label: "RED" }, { id: "BLUE", label: "BLUE" }],
@@ -33,6 +35,7 @@ export const splitDecision: MinigameDefinition = {
 
 export const makeItWorse: MinigameDefinition = {
   id: "make-it-worse",
+  interaction: "read", difficulty: 1,
   displayName: "Make It Worse",
   instructions: "Pick the escalation you think your friends will choose most. Read the room; the reveal decides the points.",
   options: ({ gameNumber }) => {
@@ -61,6 +64,7 @@ export const makeItWorse: MinigameDefinition = {
 
 export const trustMe: MinigameDefinition = {
   id: "trust-me",
+  interaction: "trust", finaleSuitable: true, difficulty: 2,
   displayName: "Trust Me",
   instructions: "A bag of surprise cash is on the table. Pick your move in secret; the group decides who walks away smiling.",
   options: () => TRUST_ME_OPTIONS.map((option) => ({ ...option })),
@@ -97,6 +101,7 @@ export const trustMe: MinigameDefinition = {
 
 export const pileOn: MinigameDefinition = {
   id: "pile-on",
+  interaction: "target", difficulty: 2,
   displayName: "Pile On",
   instructions: "Spend your spotlight: call out one friend, duck for cover, or take a safe point. All moves land together.",
   options: ({ players }) => [
@@ -142,6 +147,7 @@ export const pileOn: MinigameDefinition = {
 
 export const secretHandshake: MinigameDefinition = {
   id: "secret-handshake",
+  interaction: "alliance", finaleSuitable: true, difficulty: 2,
   displayName: "Secret Handshake",
   instructions: "Pick one friend to trust with a secret pact. A mutual reach pays both; a one-sided reach leaves someone exposed.",
   options: ({ players }) => [
@@ -184,6 +190,7 @@ export const secretHandshake: MinigameDefinition = {
 
 export const hotPotato: MinigameDefinition = {
   id: "hot-potato",
+  interaction: "target", finaleSuitable: true, difficulty: 2,
   displayName: "Hot Potato",
   instructions: "Pass the mess to one friend or take the heat yourself. A pass only pays if your target sends it to somebody else.",
   options: ({ players }) => [
@@ -221,7 +228,7 @@ export const hotPotato: MinigameDefinition = {
   },
 };
 
-export const MINIGAMES: Record<string, MinigameDefinition> = Object.fromEntries([splitDecision, makeItWorse, trustMe, pileOn, secretHandshake, hotPotato].map((game) => [game.id, game]));
+export const MINIGAMES: Record<string, MinigameDefinition> = Object.fromEntries([splitDecision, makeItWorse, trustMe, pileOn, secretHandshake, hotPotato, ...EXPANSION_GAMES].map((game) => [game.id, game]));
 
 export function registerMinigame(definition: MinigameDefinition) {
   if (!definition.id.trim() || MINIGAMES[definition.id]) throw new Error("A minigame with that ID is already registered");
@@ -233,7 +240,7 @@ export function resolveAwards(history: Array<{ result: MinigameResolution }>, pl
     { id: "most-targeted", name: "Most Targeted", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "target" && event.targetId === id).length, detail: "callouts received" },
     { id: "biggest-gambler", name: "Biggest Gambler", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "gamble" && event.playerId === id).length, detail: "double-or-nothing risks" },
     { id: "best-read", name: "Best Read", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "read" && event.playerId === id && event.accurate).length, detail: "crowd favorites called" },
-    { id: "worst-ally", name: "Worst Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayal" ? event.playerId === id : event.type === "betrayed" && event.targetId === id).length, detail: "betrayals and dirty moves" },
+    { id: "worst-ally", name: "Worst Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayal" ? event.playerId === id : event.type === "alliance" && !event.mutual && event.playerId === id).length, detail: "betrayal moves" },
     { id: "chaos-agent", name: "Chaos Agent", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "chaos" && event.playerId === id).length, detail: "moves that shook the room" },
     { id: "most-betrayed", name: "Most Betrayed", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayed" && event.playerId === id).length, detail: "times left holding the bag" },
     { id: "best-ally", name: "Best Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "alliance" && event.mutual && event.playerId === id && event.playerId < event.targetId).length, detail: "mutual pacts made" },

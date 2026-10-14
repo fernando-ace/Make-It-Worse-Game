@@ -85,5 +85,31 @@ describe("authenticated party room API", () => {
     expect(first.id).not.toBe(second.data.id);
     expect((await request("x", { op: "action", code: first.code, action: { type: "sync" } })).status).toBe(410);
   });
+
+  it("keeps objectives, power use, and balances role-filtered through API refreshes", async () => {
+    const host = await create();
+    await request("p", { op: "join", code: host.code, name: "Friend" });
+    await request("c", { op: "action", code: host.code, action: { type: "start" } });
+    await request("c", { op: "action", code: host.code, action: { type: "begin-game" } });
+    const initial = await request("c", { op: "action", code: host.code, action: { type: "sync" } });
+    expect(initial.data.session.myObjective).toBeTruthy();
+    expect(initial.data.session.myChaos).toBe(2);
+    expect(initial.data.session).not.toHaveProperty("objectives");
+    expect(initial.data.session).not.toHaveProperty("seed");
+    expect(initial.data.session.objectiveReveal).toBeUndefined();
+    const spend = { op: "action", code: host.code, action: { type: "use-power", value: "guard" }, actionId: "api-power-once" };
+    const spent = await request("c", spend);
+    expect(spent.data.session.myChaos).toBe(0);
+    expect(spent.data.session.myPowers).toHaveLength(1);
+    const duplicate = await request("c", { ...spend, action: { type: "use-power", value: "amplify" } });
+    expect(duplicate.data.session.myChaos).toBe(0);
+    expect(duplicate.data.session.myPowers[0].id).toBe("guard");
+    const guest = await request("p", { op: "action", code: host.code, action: { type: "sync" } });
+    expect(guest.data.session.myChaos).toBe(2);
+    expect(guest.data.session.myPowers).toEqual([]);
+    expect(JSON.stringify(guest.data.session)).not.toContain("api-power-once");
+    expect(guest.data.session.myObjective).toBeTruthy();
+    expect(guest.data.session.objectiveReveal).toBeUndefined();
+  });
 });
 
