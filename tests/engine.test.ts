@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { apply, join, MINIGAMES, registerMinigame, selectSessionGames, SESSION_GAME_COUNT, snapshot } from "../lib/engine";
-import type { MinigameDefinition, Room } from "../lib/types";
+import { resolveAwards } from "../lib/games";
+import type { GameEvent, HouseRule, MinigameDefinition, MinigameResolution, Room } from "../lib/types";
 
 const now = 1_000_000;
 let actionNumber = 0;
@@ -70,7 +71,9 @@ describe("authoritative party session engine", () => {
   });
   it("scores Split Decision by reading the minority", () => {
     const room = makeRoom(); setGame(room, "split-decision"); submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" });
-    expect(room.session?.round?.result?.points).toEqual({ p0: 2, p1: 0, p2: 0 });
+    expect(room.session?.round?.result?.points).toEqual({ p0: 2, p1: -1, p2: -1 });
+    expect(room.session?.round?.result?.events).toContainEqual({ type: "read", playerId: "p0", accurate: true });
+    expect(room.session?.round?.result?.events).toContainEqual({ type: "read", playerId: "p1", accurate: false });
     expect(room.session?.round?.result?.reveal).toBe("RED was the minority.");
   });
   it("uses structured scenario data and rewards the Make It Worse crowd read", () => {
@@ -78,14 +81,14 @@ describe("authoritative party session engine", () => {
     expect(room.session?.gameConfig.promptId).toBe("wedding-toast");
     const options = room.session!.gameConfig.options;
     submissions(room, { p0: options[0].id, p1: options[1].id, p2: options[1].id });
-    expect(room.session?.round?.result?.points).toEqual({ p0: 0, p1: 2, p2: 2 });
+    expect(room.session?.round?.result?.points).toEqual({ p0: -1, p1: 2, p2: 2 });
     expect(room.session?.round?.result?.events).toContainEqual({ type: "read", playerId: "p1", accurate: true });
     expect(room.session?.round?.result?.reveal).toContain(options[1].label);
   });
   it("makes Trust Me's pool, safe point, gamble, and betrayal resolve together", () => {
     const room = makeRoom(4); setGame(room, "trust-me");
     submissions(room, { p0: "pool", p1: "swipe", p2: "pocket", p3: "risk" });
-    expect(room.session?.round?.result?.basePoints).toEqual({ p0: 0, p1: 2, p2: 1, p3: 0 });
+    expect(room.session?.round?.result?.basePoints).toEqual({ p0: 0, p1: 2, p2: 1, p3: -1 });
     expect(room.session?.round?.result?.events).toContainEqual({ type: "betrayal", playerId: "p1" });
     expect(room.session?.round?.result?.events).toContainEqual({ type: "gamble", playerId: "p3", result: "lost" });
   });
@@ -135,7 +138,7 @@ describe("authoritative party session engine", () => {
     ];
     const option = room.session!.round!.config.options[0].id;
     submissions(room, { p0: room.session!.round!.config.options[1].id, p1: option, p2: option });
-    expect(room.session?.round?.result?.points).toEqual({ p0: 0, p1: 7, p2: 6 });
+    expect(room.session?.round?.result?.points).toEqual({ p0: -2, p1: 7, p2: 6 });
     expect(room.session?.round?.result?.modifiers.p1).toEqual(["Double Down ×2: 2 → 4", "Underdog +1", "Bounty +2"]);
   });
   it("enforces first commitment and applies a targeted loss shield server-side", () => {
@@ -159,11 +162,84 @@ describe("authoritative party session engine", () => {
     const room = makeRoom(5); setGame(room, "split-decision", 6);
     room.session!.scores = { p0: 8, p1: 6, p2: 5, p3: 3, p4: 3 };
     submissions(room, { p0: "RED", p1: "RED", p2: "RED", p3: "BLUE", p4: "BLUE" });
-    expect(room.session?.round?.result?.basePoints).toEqual({ p0: 0, p1: 0, p2: 0, p3: 2, p4: 2 });
-    expect(room.session?.round?.result?.points).toEqual({ p0: 0, p1: 0, p2: 0, p3: 4, p4: 4 });
+    expect(room.session?.round?.result?.basePoints).toEqual({ p0: -1, p1: -1, p2: -1, p3: 2, p4: 2 });
+    expect(room.session?.round?.result?.points).toEqual({ p0: -1, p1: -1, p2: -1, p3: 7, p4: 7 });
+    expect(room.session?.round?.result?.modifiers.p3).toContain("Finale round leader +3");
     expect(room.session?.round?.result?.modifiers.p3).toContain("Finale comeback +2");
     expect(room.session?.round?.result?.modifiers.p4).toContain("Finale comeback +2");
-    expect(room.session?.scores).toEqual({ p0: 8, p1: 6, p2: 5, p3: 7, p4: 7 });
+    expect(room.session?.scores).toEqual({ p0: 7, p1: 5, p2: 4, p3: 10, p4: 10 });
+  });
+  it("makes chaos moves earn a visible one-point stake in game five", () => {
+    const room = makeRoom(4); setGame(room, "trust-me", 5);
+    submissions(room, { p0: "pool", p1: "swipe", p2: "pocket", p3: "pocket" });
+    const result = room.session?.round?.result;
+    expect(result?.basePoints.p1).toBe(2);
+    expect(result?.points.p1).toBe(3);
+    expect(result?.modifiers.p1).toContain("Game 5 chaos +1");
+    expect(result?.reasons.p1).toContain("Game 5 chaos +1");
+  });
+  it.each(["split-decision", "make-it-worse", "trust-me", "pile-on", "secret-handshake", "hot-potato"])("gives %s a game-five chaos interaction", (gameId) => {
+    const room = makeRoom(4); setGame(room, gameId, 5);
+    const config = room.session!.round!.config;
+    const disruptivePlayer = gameId === "trust-me" ? "p1" : gameId === "hot-potato" ? "p3" : "p0";
+    const choicesByGame: Record<string, Record<string, string>> = {
+      "split-decision": { p0: "RED", p1: "RED", p2: "RED", p3: "BLUE" },
+      "make-it-worse": { p0: config.options[0].id, p1: config.options[1].id, p2: config.options[1].id, p3: config.options[1].id },
+      "trust-me": { p0: "pool", p1: "swipe", p2: "pocket", p3: "pocket" },
+      "pile-on": { p0: "target:p3", p1: "target:p0", p2: "target:p0", p3: "cash" },
+      "secret-handshake": { p1: "reach:p2", p0: "reach:p1", p2: "reach:p3", p3: "solo" },
+      "hot-potato": { p1: "pass:p0", p0: "hold", p2: "pass:p0", p3: "pass:p2" },
+    };
+    const choices = choicesByGame[gameId];
+    submissions(room, choices);
+    const result = room.session!.round!.result!;
+    expect(result.events).toContainEqual({ type: "chaos", playerId: disruptivePlayer });
+    expect(result.modifiers[disruptivePlayer]).toContain("Game 5 chaos +1");
+    expect(result.reasons[disruptivePlayer]).toContain("Game 5 chaos +1");
+  });
+  it("credits betrayal awards to the perpetrator and the player who was betrayed", () => {
+    const players = makeRoom().players;
+    const events: GameEvent[] = [
+      { type: "betrayed", playerId: "p0", targetId: "p1" },
+      { type: "betrayal", playerId: "p2" },
+    ];
+    const result = { events } as MinigameResolution;
+    const awards = resolveAwards([{ result }], players);
+    expect(awards.find((award) => award.id === "most-betrayed")?.playerId).toBe("p0");
+    expect(awards.find((award) => award.id === "worst-ally")?.playerId).toBe("p1");
+  });
+  it.each([
+    ["split-decision", { p1: "RED", p0: "RED", p2: "RED", p3: "BLUE" }],
+    ["make-it-worse", { p1: "wedding-toast-1", p0: "wedding-toast-0", p2: "wedding-toast-1", p3: "wedding-toast-1" }],
+    ["trust-me", { p1: "pool", p0: "risk", p2: "swipe", p3: "pocket" }],
+    ["pile-on", { p1: "target:p0", p0: "target:p3", p2: "target:p0", p3: "cash" }],
+    ["secret-handshake", { p1: "reach:p2", p0: "reach:p1", p2: "reach:p3", p3: "solo" }],
+    ["hot-potato", { p1: "pass:p0", p0: "hold", p2: "pass:p0", p3: "pass:p2" }],
+  ] as const)("lets multiple House Rules change %s", (gameId, choices) => {
+    const room = makeRoom(4); setGame(room, gameId, 2);
+    const activeRules: HouseRule[] = [
+      { id: "double-down", name: "Double Down", description: "Double scores.", activationPoint: "next-game", canStack: true, effect: { type: "score-multiplier", multiplier: 2 } },
+      { id: "underdog", name: "Underdog", description: "Last place gets extra.", activationPoint: "next-game", canStack: false, effect: { type: "last-place-bonus", points: 1 } },
+      { id: "bounty", name: "Bounty", description: "Beat the mark.", activationPoint: "next-game", canStack: false, effect: { type: "bounty", points: 2, targetId: "p0" } },
+      { id: "first-commit", name: "First on the Record", description: "Commit first.", activationPoint: "next-game", canStack: false, effect: { type: "forced-first", playerId: "p1" } },
+      { id: "safety-net", name: "Soft Landing", description: "Cannot lose points.", activationPoint: "next-game", canStack: false, effect: { type: "score-floor", playerId: "p0" } },
+    ];
+    room.session!.scores = { p0: 10, p1: 7, p2: 5, p3: 0 };
+    room.session!.activeRules = activeRules;
+    room.session!.round = null;
+    room.session!.phase = "game-intro";
+    act(room, "p0", "begin-game");
+    expect(room.session!.round!.firstCommitPlayerId).toBe("p1");
+    expect(() => act(room, "p0", "submit", choices.p0)).toThrow("commit first");
+    submissions(room, choices);
+    const result = room.session!.round!.result!;
+    expect(result.basePoints.p0).toBe(-1);
+    expect(result.points.p0).toBe(0);
+    expect(result.modifiers.p0).toContain("Soft Landing +1");
+    expect(result.modifiers.p3).toContain(`Double Down ×2: ${result.basePoints.p3} → ${result.basePoints.p3 * 2}`);
+    expect(result.modifiers.p3).toContain("Underdog +1");
+    expect(result.modifiers.p3).toContain("Bounty +2");
+    expect(result.points.p3).toBe(result.basePoints.p3 * 2 + 3);
   });
   it("persists scores and rules across the session and derives awards only from recorded events", () => {
     const room = makeRoom(); setGame(room, "split-decision");

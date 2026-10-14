@@ -46,7 +46,7 @@ function chooseOffers(session: PartySession, players: Player[]) {
   for (let i = pool.length - 1; i > 0; i--) { const j = randomInt(i + 1); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   session.offeredRules = pool;
 }
-function applyHouseRules(players: Player[], scores: Record<string, number>, rules: HouseRule[], game: Omit<MinigameResolution, "points" | "modifiers" | "optionCounts">, optionCounts: Record<string, number>, finale = false): MinigameResolution {
+function applyHouseRules(players: Player[], scores: Record<string, number>, rules: HouseRule[], game: Omit<MinigameResolution, "points" | "modifiers" | "optionCounts">, optionCounts: Record<string, number>, gameNumber = 1): MinigameResolution {
   const points: Record<string, number> = {};
   const modifiers: Record<string, string[]> = Object.fromEntries(players.map((player) => [player.id, []]));
   const multiplier = rules.reduce((total, rule) => rule.effect.type === "score-multiplier" ? Math.min(4, total * rule.effect.multiplier) : total, 1);
@@ -74,9 +74,21 @@ function applyHouseRules(players: Player[], scores: Record<string, number>, rule
       modifiers[player.id].push(`Bounty +${rule.effect.points}`);
     }
   }
-  // The final game gives trailing players a small earned-only comeback boost.
-  // The whole session score remains intact and still determines the winner.
-  if (finale) {
+  if (gameNumber === 5) {
+    const chaosPlayers = new Set(game.events.flatMap((event) => event.type === "chaos" ? [event.playerId] : []));
+    for (const player of players) if (chaosPlayers.has(player.id)) {
+      points[player.id] += 1;
+      modifiers[player.id].push("Game 5 chaos +1");
+    }
+  }
+  // The finale puts extra points on the round result while preserving the
+  // accumulated session score as the final source of truth.
+  if (gameNumber === SESSION_GAME_COUNT) {
+    const roundLead = Math.max(...players.map((player) => points[player.id] ?? 0));
+    if (roundLead > 0) for (const player of players) if (points[player.id] === roundLead) {
+      points[player.id] += 3;
+      modifiers[player.id].push("Finale round leader +3");
+    }
     const lastPlaceScore = Math.min(...players.map((player) => scores[player.id] ?? 0));
     for (const player of players) if ((scores[player.id] ?? 0) === lastPlaceScore && (game.basePoints[player.id] ?? 0) > 0) {
       points[player.id] += 2;
@@ -99,7 +111,7 @@ function resolveRound(room: Room, now: number) {
   const definition = MINIGAMES[round.minigameId];
   const resolution = definition.resolve({ players: room.players, submissions: round.submissions, scores: session.scores, config: round.config });
   const counts = Object.fromEntries(round.config.options.map(({ id }) => [id, Object.values(round.submissions).filter((choice) => choice === id).length]));
-  round.result = applyHouseRules(room.players, session.scores, session.activeRules, resolution, counts, round.number === SESSION_GAME_COUNT);
+  round.result = applyHouseRules(room.players, session.scores, session.activeRules, resolution, counts, round.number);
   for (const [playerId, earned] of Object.entries(round.result.points)) session.scores[playerId] = Math.max(0, (session.scores[playerId] ?? 0) + earned);
   session.phase = "game-results";
   session.ruleWinnerId = selectWinner(room.players, round);

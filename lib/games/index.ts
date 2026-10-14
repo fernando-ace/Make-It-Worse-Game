@@ -10,7 +10,7 @@ export const splitDecision: MinigameDefinition = {
   displayName: "Split Decision",
   instructions: "Choose the side you think fewer friends will pick. Your choice stays secret until the reveal.",
   options: () => [{ id: "RED", label: "RED" }, { id: "BLUE", label: "BLUE" }],
-  config: ({ players, gameNumber }) => ({ title: "Pick your side.", prompt: "Choose the color you think the fewest people will choose.", options: splitDecision.options({ players, gameNumber }), scoreHint: "Minority pick: 2 points. A tie: 1 point each." }),
+  config: ({ players, gameNumber }) => ({ title: "Pick your side.", prompt: "Choose the color you think the fewest people will choose.", options: splitDecision.options({ players, gameNumber }), scoreHint: "Minority pick: +2. A tie: +1 each. Pick the majority: −1." }),
   validate: (choice, { config }) => config.options.some((option) => option.id === choice),
   resolve({ players, submissions }) {
     const counts = Object.fromEntries(["RED", "BLUE"].map((id) => [id, players.filter((player) => submissions[player.id] === id).length]));
@@ -20,10 +20,14 @@ export const splitDecision: MinigameDefinition = {
     const reasons: Record<string, string> = {};
     for (const player of players) {
       const choice = submissions[player.id];
-      base[player.id] = !choice ? 0 : tied ? 1 : choice === minority ? 2 : 0;
-      reasons[player.id] = !choice ? "No pick before time ran out." : tied ? "The room split evenly." : choice === minority ? "You read the room and picked the minority." : "The room went the other way.";
+      base[player.id] = !choice ? 0 : tied ? 1 : choice === minority ? 2 : -1;
+      reasons[player.id] = !choice ? "No pick before time ran out." : tied ? "The room split evenly." : choice === minority ? "You read the room and picked the minority." : "You picked the crowded side. −1.";
     }
-    return { ...emptyResult(submissions, base, reasons, tied ? "Perfectly split." : `${minority} was the minority.`), optionCounts: counts };
+    const events = players.filter((player) => submissions[player.id]).flatMap((player): GameEvent[] => {
+      const accurate = tied || submissions[player.id] === minority;
+      return [{ type: "read", playerId: player.id, accurate }, ...(!accurate ? [{ type: "chaos", playerId: player.id } as const] : [])];
+    });
+    return { ...emptyResult(submissions, base, reasons, tied ? "Perfectly split." : `${minority} was the minority.`, events), optionCounts: counts };
   },
 };
 
@@ -37,17 +41,20 @@ export const makeItWorse: MinigameDefinition = {
   },
   config: ({ gameNumber }) => {
     const prompt = MAKE_IT_WORSE_PROMPTS[(gameNumber - 1) % MAKE_IT_WORSE_PROMPTS.length];
-    return { title: "What makes it worse?", prompt: prompt.prompt, promptId: prompt.id, options: prompt.options.map((label, index) => ({ id: `${prompt.id}-${index}`, label })), scoreHint: "Pick the group’s most popular escalation. Every correct room read earns 2." };
+    return { title: "What makes it worse?", prompt: prompt.prompt, promptId: prompt.id, options: prompt.options.map((label, index) => ({ id: `${prompt.id}-${index}`, label })), scoreHint: "Pick a crowd favorite: +2. Miss the room: −1." };
   },
   validate: (choice, { config }) => config.options.some((option) => option.id === choice),
   resolve({ players, submissions, config }) {
     const optionCounts = Object.fromEntries(config.options.map(({ id }) => [id, players.filter((player) => submissions[player.id] === id).length]));
     const max = Math.max(0, ...Object.values(optionCounts));
     const topIds = new Set(Object.entries(optionCounts).filter(([, count]) => count === max && count > 0).map(([id]) => id));
-    const base = Object.fromEntries(players.map((player) => [player.id, topIds.has(submissions[player.id]) ? 2 : 0]));
-    const reasons = Object.fromEntries(players.map((player) => [player.id, !submissions[player.id] ? "No pick before time ran out." : topIds.has(submissions[player.id]) ? "You read the room: your pick tied for the crowd favorite." : "The room went for a different escalation."]));
+    const base = Object.fromEntries(players.map((player) => [player.id, !submissions[player.id] ? 0 : topIds.has(submissions[player.id]) ? 2 : -1]));
+    const reasons = Object.fromEntries(players.map((player) => [player.id, !submissions[player.id] ? "No pick before time ran out." : topIds.has(submissions[player.id]) ? "You read the room: your pick tied for the crowd favorite." : "The room went for a different escalation. −1."]));
     const topLabels = config.options.filter(({ id }) => topIds.has(id)).map(({ label }) => `“${label}”`);
-    const events = players.filter((player) => submissions[player.id]).map((player): GameEvent => ({ type: "read", playerId: player.id, accurate: topIds.has(submissions[player.id]) }));
+    const events = players.filter((player) => submissions[player.id]).flatMap((player): GameEvent[] => {
+      const accurate = topIds.has(submissions[player.id]);
+      return [{ type: "read", playerId: player.id, accurate }, ...(!accurate ? [{ type: "chaos", playerId: player.id } as const] : [])];
+    });
     return { ...emptyResult(submissions, base, reasons, topLabels.length ? `The room made it worse with ${topLabels.join(" / ")}.` : "Nobody picked an escalation." , events), optionCounts };
   },
 };
@@ -57,7 +64,7 @@ export const trustMe: MinigameDefinition = {
   displayName: "Trust Me",
   instructions: "A bag of surprise cash is on the table. Pick your move in secret; the group decides who walks away smiling.",
   options: () => TRUST_ME_OPTIONS.map((option) => ({ ...option })),
-  config: () => ({ title: "There’s a bag on the table.", prompt: "It only works if the group can trust each other. What’s your move?", options: TRUST_ME_OPTIONS.map((option) => ({ ...option })), scoreHint: "Pool: +3 each only if everyone pools. Pocket: safe +1. Risk: +3 if another risks too. Swipe: +2 if anyone pools." }),
+  config: () => ({ title: "There’s a bag on the table.", prompt: "It only works if the group can trust each other. What’s your move?", options: TRUST_ME_OPTIONS.map((option) => ({ ...option })), scoreHint: "Pool: +3 each only if everyone pools. Pocket: safe +1. Risk: +3 if another risks too, otherwise −1. Swipe: +2 if anyone pools." }),
   validate: (choice) => TRUST_ME_OPTIONS.some((option) => option.id === choice),
   resolve({ players, submissions, config }) {
     const optionCounts = Object.fromEntries(config.options.map(({ id }) => [id, players.filter((player) => submissions[player.id] === id).length]));
@@ -74,8 +81,8 @@ export const trustMe: MinigameDefinition = {
       } else if (choice === "pocket") { base[player.id] = 1; reasons[player.id] = "You took the guaranteed point."; }
       else if (choice === "risk") {
         const won = optionCounts.risk >= 2;
-        base[player.id] = won ? 3 : 0;
-        reasons[player.id] = won ? "Someone else risked it too. +3." : "You were the only one to risk it.";
+        base[player.id] = won ? 3 : -1;
+        reasons[player.id] = won ? "Someone else risked it too. +3." : "You were the only one to risk it. −1.";
         events.push({ type: "gamble", playerId: player.id, result: won ? "won" : "lost" });
       } else if (choice === "swipe") {
         base[player.id] = pooled ? 2 : 0;
@@ -226,9 +233,9 @@ export function resolveAwards(history: Array<{ result: MinigameResolution }>, pl
     { id: "most-targeted", name: "Most Targeted", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "target" && event.targetId === id).length, detail: "callouts received" },
     { id: "biggest-gambler", name: "Biggest Gambler", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "gamble" && event.playerId === id).length, detail: "double-or-nothing risks" },
     { id: "best-read", name: "Best Read", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "read" && event.playerId === id && event.accurate).length, detail: "crowd favorites called" },
-    { id: "worst-ally", name: "Worst Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => (event.type === "betrayal" || event.type === "betrayed") && event.playerId === id).length, detail: "friends left holding the bag" },
+    { id: "worst-ally", name: "Worst Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayal" ? event.playerId === id : event.type === "betrayed" && event.targetId === id).length, detail: "betrayals and dirty moves" },
     { id: "chaos-agent", name: "Chaos Agent", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "chaos" && event.playerId === id).length, detail: "moves that shook the room" },
-    { id: "most-betrayed", name: "Most Betrayed", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayed" && event.targetId === id).length, detail: "one-sided deals turned against them" },
+    { id: "most-betrayed", name: "Most Betrayed", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayed" && event.playerId === id).length, detail: "times left holding the bag" },
     { id: "best-ally", name: "Best Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "alliance" && event.mutual && event.playerId === id && event.playerId < event.targetId).length, detail: "mutual pacts made" },
   ];
   return candidates.flatMap((award) => {

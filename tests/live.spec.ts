@@ -192,10 +192,10 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   }
   await host.getByRole("button", { name: "See final results" }).click();
   await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
-  await expect(host.getByText("Best Read: Alex", { exact: false })).toBeVisible();
-  await expect(host.getByText("Worst Ally: Blair", { exact: false })).toBeVisible();
+  await expect(host.getByText("Best Read: Host", { exact: false })).toBeVisible();
+  await expect(host.getByText("Worst Ally: Alex", { exact: false })).toBeVisible();
   await expect(host.getByText("Most Targeted: Host", { exact: false })).toBeVisible();
-  await expect(host.getByText("Most Betrayed: Alex", { exact: false })).toBeVisible();
+  await expect(host.getByText("Most Betrayed: Host", { exact: false })).toBeVisible();
   await expect(host.locator(".rule-explainer").getByText(/Best Ally:/)).toBeVisible();
   await expect(host.locator(".standing-row").first()).toBeVisible();
   for (const page of pages) {
