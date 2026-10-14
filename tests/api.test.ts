@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import type { Room, Snapshot } from "../lib/types";
+import { MINIGAMES } from "../lib/games";
 
 const store = vi.hoisted(() => ({ rooms: new Map<string, Room>(), conflicts: 0 }));
 vi.mock("../lib/server", () => ({
@@ -55,18 +56,24 @@ describe("authenticated party room API", () => {
     expect((await request("p", { op: "action", code: room.code, action: { type: "start" } })).data).toMatchObject({ error: "Only the host can start the party" });
     await request("c", { op: "action", code: room.code, action: { type: "start" } });
     await request("c", { op: "action", code: room.code, action: { type: "begin-game" } });
-    await request("c", { op: "action", code: room.code, action: { type: "submit", value: "RED" } });
+    const current = store.rooms.get(room.code)!;
+    const gameId = current.session!.round!.minigameId;
+    const definition = MINIGAMES[gameId];
+    const pick = (playerId: string) => current.session!.round!.config.options.find((option) => definition.validate(option.id, { players: current.players, playerId, config: current.session!.round!.config }))!.id;
+    const hostChoice = pick("c");
+    const guestChoice = pick("p");
+    await request("c", { op: "action", code: room.code, action: { type: "submit", value: hostChoice } });
     const hidden = await request("p", { op: "action", code: room.code, action: { type: "sync", value: false } });
     expect(hidden.data.session.round.myChoice).toBeNull();
     expect(hidden.data.session.round).not.toHaveProperty("submissions");
-    await request("p", { op: "action", code: room.code, action: { type: "submit", value: "BLUE" } });
+    await request("p", { op: "action", code: room.code, action: { type: "submit", value: guestChoice } });
     const saved = store.rooms.get(room.code)!;
     expect(saved.session?.phase).toBe("game-results");
-    expect(saved.session?.round?.result?.points).toEqual({ c: 1, p: 1 });
+    expect(saved.session?.round?.result?.points).toEqual(expect.objectContaining({ c: expect.any(Number), p: expect.any(Number) }));
     await request("c", { op: "action", code: room.code, action: { type: "open-rule-selection" } });
     await request("c", { op: "action", code: room.code, action: { type: "select-rule", value: "double-down" } });
     expect(store.rooms.get(room.code)?.session?.activeRules[0]?.id).toBe("double-down");
-    expect((await request("p", { op: "action", code: room.code, action: { type: "sync" } })).data.session.round.result.choices).toEqual({ c: "RED", p: "BLUE" });
+    expect((await request("p", { op: "action", code: room.code, action: { type: "sync" } })).data.session.round.result.choices).toEqual({ c: hostChoice, p: guestChoice });
   });
 
   it("preserves identity on reconnect and keeps separate rooms private", async () => {

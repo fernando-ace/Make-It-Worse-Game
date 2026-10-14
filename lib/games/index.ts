@@ -133,7 +133,88 @@ export const pileOn: MinigameDefinition = {
   },
 };
 
-export const MINIGAMES: Record<string, MinigameDefinition> = Object.fromEntries([splitDecision, makeItWorse, trustMe, pileOn].map((game) => [game.id, game]));
+export const secretHandshake: MinigameDefinition = {
+  id: "secret-handshake",
+  displayName: "Secret Handshake",
+  instructions: "Pick one friend to trust with a secret pact. A mutual reach pays both; a one-sided reach leaves someone exposed.",
+  options: ({ players }) => [
+    ...players.map((player) => ({ id: `reach:${player.id}`, label: `REACH FOR ${player.name}`, detail: "A mutual pact pays 3 each." })),
+    { id: "solo", label: "GO SOLO", detail: "No pact, no risk." },
+  ],
+  config: ({ players }) => ({ title: "Who would reach back?", prompt: "Choose one person for a private pact, or go solo. Nobody sees the pact until every hand is shown.", options: secretHandshake.options({ players, gameNumber: 0 }), scoreHint: "Mutual pact: +3 each. A one-sided reach: the reaching player −1, the person they picked +1." }),
+  validate: (choice, { players, playerId }) => choice === "solo" || (choice.startsWith("reach:") && choice.slice(6) !== playerId && players.some((player) => player.id === choice.slice(6))),
+  resolve({ players, submissions }) {
+    const base: Record<string, number> = {};
+    const reasons: Record<string, string> = {};
+    const events: GameEvent[] = [];
+    const reciprocal = new Set<string>();
+    for (const player of players) {
+      const targetId = submissions[player.id]?.startsWith("reach:") ? submissions[player.id].slice(6) : "";
+      if (targetId && submissions[targetId] === `reach:${player.id}`) reciprocal.add(player.id);
+    }
+    for (const player of players) {
+      const choice = submissions[player.id];
+      const targetId = choice?.startsWith("reach:") ? choice.slice(6) : "";
+      if (!targetId) { base[player.id] = 0; reasons[player.id] = choice === "solo" ? "You kept your hands clean." : "No pact before time ran out."; continue; }
+      const mutual = reciprocal.has(player.id);
+      if (mutual) { base[player.id] = 3; reasons[player.id] = `The pact was mutual with ${players.find((item) => item.id === targetId)?.name ?? "your friend"}. +3.`; }
+      else { base[player.id] = -1; reasons[player.id] = `${players.find((item) => item.id === targetId)?.name ?? "Your friend"} reached elsewhere. −1.`; }
+      events.push({ type: "alliance", playerId: player.id, targetId, mutual });
+      if (!mutual) events.push({ type: "betrayed", playerId: targetId, targetId: player.id }, { type: "chaos", playerId: player.id });
+    }
+    for (const player of players) {
+      const incoming = players.filter((sender) => submissions[sender.id] === `reach:${player.id}`);
+      for (const sender of incoming) if (!reciprocal.has(sender.id)) {
+        base[player.id] = (base[player.id] ?? 0) + 1;
+        reasons[player.id] = `${reasons[player.id] ?? ""} ${sender.name} reached for you; you got +1.`.trim();
+      }
+    }
+    const pairs = players.filter((player) => reciprocal.has(player.id) && player.id < submissions[player.id].slice(6)).map((player) => `${player.name} + ${players.find((item) => item.id === submissions[player.id].slice(6))?.name ?? "friend"}`);
+    const reveal = pairs.length ? `The pact held: ${pairs.join(", ")}.` : "Nobody made a mutual pact.";
+    return { choices: submissions, basePoints: base, reasons, reveal, events };
+  },
+};
+
+export const hotPotato: MinigameDefinition = {
+  id: "hot-potato",
+  displayName: "Hot Potato",
+  instructions: "Pass the mess to one friend or take the heat yourself. A pass only pays if your target sends it to somebody else.",
+  options: ({ players }) => [
+    ...players.map((player) => ({ id: `pass:${player.id}`, label: `PASS TO ${player.name}`, detail: "Earn 2 if they pass it forward." })),
+    { id: "hold", label: "TAKE THE HEAT", detail: "Earn 1, then lose 1 per pass aimed at you (max 2)." },
+  ],
+  config: ({ players }) => ({ title: "The mess is getting hot.", prompt: "Pass it to one friend or hold it. A pass back earns nothing. All passes land together.", options: hotPotato.options({ players, gameNumber: 0 }), scoreHint: "Pass: +2 if your target passes to someone else; a pass back earns nothing. Hold: +1, then −1 per pass received (up to −2)." }),
+  validate: (choice, { players, playerId }) => choice === "hold" || (choice.startsWith("pass:") && choice.slice(5) !== playerId && players.some((player) => player.id === choice.slice(5))),
+  resolve({ players, submissions }) {
+    const incoming = Object.fromEntries(players.map((player) => [player.id, players.filter((sender) => submissions[sender.id] === `pass:${player.id}`)]));
+    const base: Record<string, number> = {};
+    const reasons: Record<string, string> = {};
+    const events: GameEvent[] = [];
+    for (const player of players) {
+      const choice = submissions[player.id];
+      const targetId = choice?.startsWith("pass:") ? choice.slice(5) : "";
+      const received = incoming[player.id].length;
+      if (targetId) {
+        const escaped = Boolean(submissions[targetId]?.startsWith("pass:") && submissions[targetId] !== `pass:${player.id}`);
+        base[player.id] = escaped ? 2 : 0;
+        reasons[player.id] = escaped ? `You passed it to ${players.find((item) => item.id === targetId)?.name ?? "a friend"}; they passed it forward. +2.` : submissions[targetId]?.startsWith("pass:") ? `${players.find((item) => item.id === targetId)?.name ?? "Your target"} sent it straight back. No points.` : `${players.find((item) => item.id === targetId)?.name ?? "Your target"} held the heat, so your pass paid nothing.`;
+        events.push({ type: "target", actorId: player.id, targetId }, { type: "chaos", playerId: player.id });
+      } else if (choice === "hold") {
+        const penalty = Math.min(2, received);
+        base[player.id] = 1 - penalty;
+        reasons[player.id] = `You took the heat: +1${penalty ? `, then −${penalty} for incoming passes` : ", with no passes aimed at you"}.`;
+      } else { base[player.id] = 0; reasons[player.id] = "No move before time ran out."; }
+    }
+    for (const player of players) for (const sender of incoming[player.id]) {
+      if (submissions[player.id] === "hold") events.push({ type: "betrayed", playerId: player.id, targetId: sender.id });
+    }
+    const holders = players.filter((player) => submissions[player.id] === "hold");
+    const reveal = holders.length ? `${holders.map((player) => player.name).join(", ")} took the heat.` : "Nobody held the hot potato.";
+    return { choices: submissions, basePoints: base, reasons, reveal, events };
+  },
+};
+
+export const MINIGAMES: Record<string, MinigameDefinition> = Object.fromEntries([splitDecision, makeItWorse, trustMe, pileOn, secretHandshake, hotPotato].map((game) => [game.id, game]));
 
 export function registerMinigame(definition: MinigameDefinition) {
   if (!definition.id.trim() || MINIGAMES[definition.id]) throw new Error("A minigame with that ID is already registered");
@@ -141,12 +222,14 @@ export function registerMinigame(definition: MinigameDefinition) {
 }
 
 export function resolveAwards(history: Array<{ result: MinigameResolution }>, players: Player[]) {
-  const candidates: Array<{ id: "most-targeted" | "biggest-gambler" | "best-read" | "worst-ally" | "chaos-agent"; name: string; count: (playerId: string) => number; detail: string }> = [
+  const candidates: Array<{ id: "most-targeted" | "biggest-gambler" | "best-read" | "worst-ally" | "chaos-agent" | "most-betrayed" | "best-ally"; name: string; count: (playerId: string) => number; detail: string }> = [
     { id: "most-targeted", name: "Most Targeted", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "target" && event.targetId === id).length, detail: "callouts received" },
     { id: "biggest-gambler", name: "Biggest Gambler", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "gamble" && event.playerId === id).length, detail: "double-or-nothing risks" },
     { id: "best-read", name: "Best Read", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "read" && event.playerId === id && event.accurate).length, detail: "crowd favorites called" },
-    { id: "worst-ally", name: "Worst Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayal" && event.playerId === id).length, detail: "bags swiped" },
+    { id: "worst-ally", name: "Worst Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => (event.type === "betrayal" || event.type === "betrayed") && event.playerId === id).length, detail: "friends left holding the bag" },
     { id: "chaos-agent", name: "Chaos Agent", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "chaos" && event.playerId === id).length, detail: "moves that shook the room" },
+    { id: "most-betrayed", name: "Most Betrayed", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayed" && event.targetId === id).length, detail: "one-sided deals turned against them" },
+    { id: "best-ally", name: "Best Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "alliance" && event.mutual && event.playerId === id && event.playerId < event.targetId).length, detail: "mutual pacts made" },
   ];
   return candidates.flatMap((award) => {
     const ranked = players.map((player, index) => ({ player, count: award.count(player.id), index })).sort((a, b) => b.count - a.count || a.index - b.index);

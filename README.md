@@ -60,7 +60,7 @@ The included local Supabase config only contains this app's auth settings. Merge
 - `cr_rooms` contains room notifications and `cr_members` tracks membership. Existing RLS and service-only RPC boundaries isolate rooms and prevent browser clients from writing authoritative state.
 - Supabase Realtime prompts clients to sync; a short polling interval repairs missed notifications. Reopening a browser with its saved anonymous session reconnects the same player. A new player can join only before the host starts.
 
-The registry defines game identity, options, configuration, input validation, authoritative resolution, and reveal output. Session ordering lives in `DEFAULT_GAME_SLOTS`, separately from the engine's phase transitions. Game results expose base points and structured events; the common scorer applies House Rules consistently.
+The registry defines game identity, options, configuration, input validation, authoritative resolution, and reveal output. The server selects six distinct games by shuffling registered IDs with the server-created room ID as the session seed; the same seed reproduces the same order. Game results expose base points and structured events; the common scorer applies House Rules consistently.
 
 ## Validation
 

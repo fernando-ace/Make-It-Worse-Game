@@ -33,6 +33,10 @@ button,input{font:inherit}button,a,input{-webkit-tap-highlight-color:transparent
 .reveal-group strong{display:block;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
 .reveal-group>span{display:block;margin-top:6px;color:#8b5c23;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
 .reveal-group p{margin:7px 0 0;color:#655972;font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.first-commit-note{width:100%;margin:12px 0;padding:11px 13px;border:1px solid #ead89a;border-radius:10px;background:#fff5d8;color:#745426;font-size:12px;line-height:1.4}
+.results-phase .reveal-row{animation:reveal-in .28s ease both;animation-delay:calc(var(--reveal-index,0) * 45ms)}
+.results-phase .reveal-row:nth-child(2){animation-delay:45ms}.results-phase .reveal-row:nth-child(3){animation-delay:90ms}.results-phase .reveal-row:nth-child(4){animation-delay:135ms}.results-phase .reveal-row:nth-child(5){animation-delay:180ms}.results-phase .reveal-row:nth-child(6){animation-delay:225ms}.results-phase .reveal-row:nth-child(7){animation-delay:270ms}.results-phase .reveal-row:nth-child(8){animation-delay:315ms}
+@keyframes reveal-in{from{opacity:.25;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 .reveal-row{grid-template-columns:minmax(75px,1fr) minmax(70px,1.5fr) 40px;gap:7px;}
 .reveal-row>b{font-size:10px;letter-spacing:0;overflow-wrap:anywhere}
 .reason{left:11px;right:10px;bottom:5px}

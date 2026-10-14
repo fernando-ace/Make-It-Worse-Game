@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { existsSync } from "node:fs";
-import type { Snapshot } from "../lib/types";
+import type { GameOption, Snapshot } from "../lib/types";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 let contexts: BrowserContext[] = [];
@@ -90,7 +90,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   expect(latest.get(host)?.me).toBe(originalHostId);
   await expect(host.getByRole("button", { name: "Start the party" })).toBeEnabled();
 
-  async function startRound(number: number, gameName: string) {
+  async function startRound(number: number) {
     if (number > 1) {
       await expect.poll(() => latest.get(host)?.hostId).toBe(originalHostId);
       await expect.poll(() => latest.get(host)?.me).toBe(originalHostId);
@@ -98,14 +98,14 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       await expect.poll(() => latest.get(host)?.session?.gameNumber, { timeout: 60000 }).toBe(number);
       await expect(host.getByRole("button", { name: `Start game ${number}` })).toBeVisible();
     }
-    await expect(host.getByRole("heading", { name: gameName, exact: true })).toBeVisible();
+    const gameName = await host.locator(".intro-phase h2").innerText();
     await host.getByRole("button", { name: `Start game ${number}` }).click();
     await expect(host.locator(".round-meta")).toContainText(gameName);
     for (const page of pages) await expect.poll(() => latest.get(page)?.session?.phase, { timeout: 60000 }).toBe("active-game");
     const snapshot = latest.get(host)!;
     expect(snapshot.session?.round?.minigameId).toBe(snapshot.session?.gameSlots[number - 1]);
     expect(snapshot.session?.round).not.toHaveProperty("submissions");
-    return snapshot.session!.round!.config.options;
+    return { options: snapshot.session!.round!.config.options, gameId: snapshot.session!.round!.minigameId, gameName };
   }
   async function choose(page: Page, label: string) {
     const round = latest.get(host)?.session?.round;
@@ -114,7 +114,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     await page.locator(".choice-button").filter({ hasText: label }).first().click();
     await expect.poll(() => latest.get(page)?.session?.round?.myChoice, { timeout: 60000 }).toBe(choice);
   }
-  async function finishRound(rule: "Double Down" | "Bounty" | "Underdog") {
+  async function finishRound(rule: string) {
     await expect(host.locator(".reveal-groups")).toBeVisible({ timeout: 60000 });
     await expect(host.locator(".reveal-row")).toHaveCount(3);
     await expect.poll(() => latest.get(host)?.session?.phase, { timeout: 60000 }).toBe("game-results");
@@ -132,67 +132,71 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   }
 
   await host.getByRole("button", { name: "Start the party" }).click();
-  let options = await startRound(1, "Split Decision");
-  await choose(host, "RED");
-  await expect.poll(() => latest.get(guestOne)?.session?.round?.myChoice).toBeNull();
-  await expect(latest.get(guestOne)?.session?.round).not.toHaveProperty("submissions");
-  await Promise.all([choose(guestOne, "BLUE"), choose(guestTwo, "BLUE")]);
-  await expect(host.getByRole("heading", { name: "RED was the minority." })).toBeVisible();
-  await finishRound("Double Down");
-
-  options = await startRound(2, "Make It Worse");
-  expect(latest.get(host)?.session?.round?.config.promptId).toBeTruthy();
-  await choose(host, options[0].label);
-  await guestTwo.reload();
-  await expect(guestTwo.locator(".connection")).toHaveText("Connected");
-  await expect(guestTwo.locator(".active-rule")).toContainText("Double Down");
-  await expect(guestTwo.getByText("Your choice is locked")).toHaveCount(0);
-  await Promise.all([choose(guestOne, options[1].label), choose(guestTwo, options[1].label)]);
-  await expect(host.locator(".reveal-group").filter({ hasText: options[1].label })).toContainText("2 picked");
-  await expect.poll(() => latest.get(host)?.session?.round?.result?.points[latest.get(guestOne)?.me ?? ""] ?? -1).toBeGreaterThan(0);
-  await finishRound("Bounty");
-
-  await startRound(3, "Trust Me");
-  await Promise.all([choose(host, "POOL IT"), choose(guestOne, "DOUBLE OR NOTHING"), choose(guestTwo, "SWIPE THE BAG")]);
-  await expect(host.locator(".reveal-row").filter({ hasText: "Blair" })).toContainText("SWIPE THE BAG");
-  await expect.poll(() => latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayal")).toBe(true);
-  await finishRound("Underdog");
-
-  await startRound(4, "Split Decision");
-  await Promise.all([choose(host, "RED"), choose(guestOne, "BLUE"), choose(guestTwo, "BLUE")]);
-  await expect.poll(() => latest.get(host)?.session?.round?.result?.modifiers[latest.get(host)?.me ?? ""] ?? []).toContain("Underdog +1");
-  await finishRound("Double Down");
-
-  options = await startRound(5, "Pile On");
-  const bounty = latest.get(host)!.session!.activeRules.find((rule) => rule.id === "bounty");
-  expect(bounty?.effect.type).toBe("bounty");
-  await expect(host.locator(".active-rule").filter({ hasText: "House Rule · Bounty" })).toBeVisible();
-  await expect(guestOne.locator(".active-rule").filter({ hasText: "House Rule · Underdog" })).toBeVisible();
-  const bountyTargetId = bounty?.effect.type === "bounty" ? bounty.effect.targetId : "";
-  const bountyTargetPage = pages.find((page) => latest.get(page)?.me === bountyTargetId)!;
-  const otherCalloutPages = pages.filter((candidate) => candidate !== host && candidate !== bountyTargetPage);
-  await Promise.all([
-    bountyTargetPage !== host ? choose(bountyTargetPage, "DUCK FOR COVER") : choose(host, "DUCK FOR COVER"),
-    bountyTargetPage === host ? Promise.resolve() : choose(host, "TAKE A SAFE POINT"),
-    ...otherCalloutPages.map((page) => choose(page, "CALL OUT Host")),
-  ]);
-  await expect.poll(() => latest.get(guestTwo)?.session?.phase).toBe("game-results");
-  await expect(latest.get(host)?.session?.round).not.toHaveProperty("submissions");
-  await finishRound("Double Down");
-  await expect.poll(() => {
-    const modifiers = latest.get(host)?.session?.round?.result?.modifiers ?? {};
-    return Object.values(modifiers).some((items) => items.some((modifier) => modifier.startsWith("Bounty +")));
-  }).toBe(true);
-
-  options = await startRound(6, "Make It Worse");
-  await Promise.all([choose(host, options[0].label), choose(guestOne, options[1].label), choose(guestTwo, options[1].label)]);
-  await expect(host.locator(".reveal-group").filter({ hasText: options[1].label })).toContainText("2 picked");
-  await finishRound("Double Down");
+  await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
+  await expect.poll(() => latest.get(host)?.session).not.toBeNull();
+  const selectedGames = latest.get(host)!.session!.gameSlots;
+  expect(selectedGames).toHaveLength(6);
+  expect(new Set(selectedGames).size).toBe(6);
+  const byId = (id: string) => pages.find((page) => latest.get(page)?.me === id)!;
+  const labelFor = (gameId: string, playerName: string, options: GameOption[]) => {
+    if (gameId === "split-decision") return playerName === "Host" ? "RED" : "BLUE";
+    if (gameId === "make-it-worse") return playerName === "Host" ? options[0].label : options[1].label;
+    if (gameId === "trust-me") return ({ Host: "POOL IT", Alex: "DOUBLE OR NOTHING", Blair: "SWIPE THE BAG" } as Record<string, string>)[playerName];
+    if (gameId === "pile-on") return playerName === "Host" ? "DUCK FOR COVER" : "CALL OUT Host";
+    if (gameId === "secret-handshake") return ({ Host: "REACH FOR Blair", Alex: "REACH FOR Host", Blair: "REACH FOR Host" } as Record<string, string>)[playerName];
+    if (gameId === "hot-potato") return ({ Host: "PASS TO Alex", Alex: "PASS TO Blair", Blair: "TAKE THE HEAT" } as Record<string, string>)[playerName];
+    throw new Error(`Unexpected game ${gameId}`);
+  };
+  const ruleByRound = ["First on the Record", "Soft Landing", "Double Down", "Bounty", "Underdog", "Double Down"];
+  for (let number = 1; number <= 6; number++) {
+    const { options, gameId } = await startRound(number);
+    if (gameId === "make-it-worse") expect(latest.get(host)?.session?.round?.config.promptId).toBeTruthy();
+    if (gameId === "trust-me" || gameId === "pile-on" || gameId === "secret-handshake" || gameId === "hot-potato") {
+      expect(options.length).toBeGreaterThanOrEqual(4);
+    }
+    if (number === 4) {
+      const activeIds = latest.get(host)!.session!.activeRules.map((rule) => rule.id);
+      expect(activeIds).toEqual(expect.arrayContaining(["first-commit", "safety-net", "double-down"]));
+      await expect(host.locator(".active-rule")).toHaveCount(activeIds.length);
+    }
+    const round = latest.get(host)!.session!.round!;
+    const firstPage = round.firstCommitPlayerId ? byId(round.firstCommitPlayerId) : null;
+    const orderedPages = firstPage ? [firstPage, ...pages.filter((page) => page !== firstPage)] : pages;
+    if (number === 2) {
+      expect(round.firstCommitPlayerId).toBeTruthy();
+      const waitingPage = pages.find((page) => page !== firstPage)!;
+      await expect(waitingPage.locator(".first-commit-note")).toBeVisible();
+      await expect(waitingPage.locator(".choice-button").first()).toBeDisabled();
+      const commitLabel = labelFor(gameId, latest.get(firstPage!)!.players.find((player) => player.id === round.firstCommitPlayerId)?.name ?? "Host", options);
+      await choose(firstPage!, commitLabel);
+      const reconnectPage = pages.find((page) => page !== firstPage)!;
+      await reconnectPage.reload();
+      await expect(reconnectPage.locator(".connection")).toHaveText("Connected");
+      await expect(reconnectPage.locator(".active-rule")).toContainText("First on the Record");
+      expect(latest.get(reconnectPage)?.session?.round?.myChoice).toBeNull();
+      expect(latest.get(reconnectPage)?.session?.round).not.toHaveProperty("submissions");
+      for (const page of pages.filter((candidate) => candidate !== firstPage)) await choose(page, labelFor(gameId, latest.get(page)!.players.find((player) => player.id === latest.get(page)!.me)?.name ?? "", options));
+    } else {
+      for (const page of orderedPages) {
+        const playerName = latest.get(page)!.players.find((player) => player.id === latest.get(page)!.me)?.name ?? "";
+        await choose(page, labelFor(gameId, playerName, options));
+      }
+    }
+    await expect(host.locator(".reveal-groups")).toBeVisible({ timeout: 60000 });
+    await expect(host.locator(".reveal-row")).toHaveCount(3);
+    await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
+    await finishRound(ruleByRound[number - 1]);
+    if (gameId === "make-it-worse") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "read")).toBe(true);
+    if (gameId === "trust-me") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayal")).toBe(true);
+    if (gameId === "secret-handshake") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayed")).toBe(true);
+  }
   await host.getByRole("button", { name: "See final results" }).click();
   await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
   await expect(host.getByText("Best Read: Alex", { exact: false })).toBeVisible();
   await expect(host.getByText("Worst Ally: Blair", { exact: false })).toBeVisible();
   await expect(host.getByText("Most Targeted: Host", { exact: false })).toBeVisible();
+  await expect(host.getByText("Most Betrayed: Alex", { exact: false })).toBeVisible();
+  await expect(host.locator(".rule-explainer").getByText(/Best Ally:/)).toBeVisible();
   await expect(host.locator(".standing-row").first()).toBeVisible();
   for (const page of pages) {
     const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));

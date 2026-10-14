@@ -5,10 +5,12 @@ export type GamePhase = "game-intro" | "active-game" | "game-results" | "house-r
 export type HouseRuleEffect =
   | { type: "score-multiplier"; multiplier: number }
   | { type: "last-place-bonus"; points: number }
-  | { type: "bounty"; points: number; targetId: string };
+  | { type: "bounty"; points: number; targetId: string }
+  | { type: "forced-first"; playerId: string }
+  | { type: "score-floor"; playerId: string };
 
 export type HouseRule = {
-  id: "underdog" | "bounty" | "double-down";
+  id: "underdog" | "bounty" | "double-down" | "first-commit" | "safety-net";
   name: string;
   description: string;
   activationPoint: "next-game";
@@ -23,7 +25,9 @@ export type GameEvent =
   | { type: "gamble"; playerId: string; result: "won" | "lost" }
   | { type: "read"; playerId: string; accurate: boolean }
   | { type: "betrayal"; playerId: string }
-  | { type: "chaos"; playerId: string };
+  | { type: "chaos"; playerId: string }
+  | { type: "alliance"; playerId: string; targetId: string; mutual: boolean }
+  | { type: "betrayed"; playerId: string; targetId: string };
 export type MinigameResolution = {
   choices: Record<string, string>;
   basePoints: Record<string, number>;
@@ -34,7 +38,7 @@ export type MinigameResolution = {
   events: GameEvent[];
   reveal: string;
 };
-export type PartyRound = { number: number; minigameId: string; startedAt: number; deadlineAt: number; config: MinigameConfig; submissions: Record<string, string>; result: MinigameResolution | null };
+export type PartyRound = { number: number; minigameId: string; startedAt: number; deadlineAt: number; config: MinigameConfig; submissions: Record<string, string>; firstCommitPlayerId: string | null; result: MinigameResolution | null };
 export type PartySession = {
   phase: GamePhase;
   gameNumber: number;
@@ -49,7 +53,7 @@ export type PartySession = {
   history: Array<{ number: number; minigameId: string; result: MinigameResolution; rules: HouseRule[]; selectedRule: HouseRule | null }>;
   awards: SessionAward[];
 };
-export type SessionAward = { id: "most-targeted" | "biggest-gambler" | "best-read" | "worst-ally" | "chaos-agent"; name: string; playerId: string; count: number; detail: string };
+export type SessionAward = { id: "most-targeted" | "biggest-gambler" | "best-read" | "worst-ally" | "chaos-agent" | "most-betrayed" | "best-ally"; name: string; playerId: string; count: number; detail: string };
 export type MinigameDefinition = {
   id: string;
   displayName: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apply, DEFAULT_GAME_SLOTS, join, MINIGAMES, registerMinigame, SESSION_GAME_COUNT, snapshot } from "../lib/engine";
+import { apply, join, MINIGAMES, registerMinigame, selectSessionGames, SESSION_GAME_COUNT, snapshot } from "../lib/engine";
 import type { MinigameDefinition, Room } from "../lib/types";
 
 const now = 1_000_000;
@@ -22,18 +22,21 @@ function setGame(room: Room, gameId: string, number = 1) {
 function submissions(room: Room, choices: Record<string, string>) { for (const [id, choice] of Object.entries(choices)) act(room, id, "submit", choice); }
 
 describe("authoritative party session engine", () => {
-  it("starts the configured six-game session with all four social mechanics", () => {
+  it("starts six distinct registry games in a deterministic seeded order", () => {
     const room = makeRoom(); start(room);
-    expect(DEFAULT_GAME_SLOTS).toEqual(["split-decision", "make-it-worse", "trust-me", "split-decision", "pile-on", "make-it-worse"]);
+    expect(selectSessionGames("same-seed")).toEqual(selectSessionGames("same-seed"));
+    expect(selectSessionGames("same-seed")).not.toEqual(selectSessionGames("other-seed"));
     expect(room.session?.gameSlots).toHaveLength(SESSION_GAME_COUNT);
-    expect(new Set(room.session?.gameSlots).size).toBe(4);
-    expect(Object.keys(MINIGAMES)).toEqual(expect.arrayContaining(["split-decision", "make-it-worse", "trust-me", "pile-on"]));
+    expect(new Set(room.session?.gameSlots).size).toBe(SESSION_GAME_COUNT);
+    expect(Object.keys(MINIGAMES)).toEqual(expect.arrayContaining(["split-decision", "make-it-worse", "trust-me", "pile-on", "secret-handshake", "hot-potato"]));
     expect(room.session?.phase).toBe("active-game");
   });
   it("keeps the registry open for new compatible definitions without replacing IDs", () => {
     const definition: MinigameDefinition = { id: "audit-test-game", displayName: "Test", instructions: "Choose.", options: () => [{ id: "A", label: "A" }], config: ({ players, gameNumber }) => ({ title: "Pick", prompt: "Choose", options: [{ id: "A", label: "A" }], scoreHint: "One point", promptId: `${players.length}-${gameNumber}` }), validate: (choice) => choice === "A", resolve: ({ players, submissions }) => ({ choices: submissions, basePoints: Object.fromEntries(players.map((p) => [p.id, 1])), reasons: Object.fromEntries(players.map((p) => [p.id, "Picked A"])), events: [], reveal: "A wins" }) };
     registerMinigame(definition);
     expect(MINIGAMES[definition.id]).toBe(definition);
+    expect(selectSessionGames("same-seed")).toHaveLength(SESSION_GAME_COUNT);
+    expect(new Set(selectSessionGames("same-seed")).size).toBe(SESSION_GAME_COUNT);
     expect(() => registerMinigame(definition)).toThrow("already registered");
   });
   it("supports 2 to 8 players and rejects outsiders", () => {
@@ -43,22 +46,22 @@ describe("authoritative party session engine", () => {
   it("keeps each game's submitted action private and restores only the reconnecting player's choice", () => {
     for (const gameId of Object.keys(MINIGAMES)) {
       const room = makeRoom(); setGame(room, gameId);
-      const choice = room.session!.round!.config.options.find((option) => !option.id.startsWith("target:p0"))!.id;
+      const definition = MINIGAMES[gameId];
+      const choice = room.session!.round!.config.options.find((option) => definition.validate(option.id, { players: room.players, playerId: "p0", config: room.session!.round!.config }))!.id;
       act(room, "p0", "submit", choice);
       const view = snapshot(room, "p1", now + 100);
       expect(view.session?.round?.myChoice).toBeNull();
       expect(view.session?.round).not.toHaveProperty("submissions");
       expect(JSON.stringify(view.session?.round)).not.toContain('"p0":"');
       expect(snapshot(room, "p0", now + 200).session?.round?.myChoice).toBe(choice);
-      const followup = room.session!.round!.config.options.find((option) => !option.id.startsWith("target:"))!.id;
-      submissions(room, { p1: followup, p2: followup });
+      submissions(room, Object.fromEntries(["p1", "p2"].map((playerId) => [playerId, room.session!.round!.config.options.find((option) => definition.validate(option.id, { players: room.players, playerId, config: room.session!.round!.config }))!.id])));
       expect(snapshot(room, "p0", now + 300).session?.round?.result).toEqual(snapshot(room, "p1", now + 300).session?.round?.result);
     }
   });
   it.each(Object.keys(MINIGAMES))("rejects invalid and duplicate actions for %s", (gameId) => {
     const room = makeRoom(); setGame(room, gameId);
     expect(() => act(room, "p0", "submit", "forged-action")).toThrow("options shown");
-    const choice = room.session!.round!.config.options.find((option) => !option.id.startsWith("target:p0"))!.id;
+    const choice = room.session!.round!.config.options.find((option) => MINIGAMES[gameId].validate(option.id, { players: room.players, playerId: "p0", config: room.session!.round!.config }))!.id;
     const reusedId = `same-action-${gameId}`;
     act(room, "p0", "submit", choice, now, reusedId);
     act(room, "p0", "submit", "forged-action", now, reusedId);
@@ -66,7 +69,7 @@ describe("authoritative party session engine", () => {
     expect(() => act(room, "p0", "submit", choice)).toThrow("already locked");
   });
   it("scores Split Decision by reading the minority", () => {
-    const room = makeRoom(); start(room); submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" });
+    const room = makeRoom(); setGame(room, "split-decision"); submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" });
     expect(room.session?.round?.result?.points).toEqual({ p0: 2, p1: 0, p2: 0 });
     expect(room.session?.round?.result?.reveal).toBe("RED was the minority.");
   });
@@ -94,13 +97,32 @@ describe("authoritative party session engine", () => {
     expect(room.session?.round?.result?.events.filter((event) => event.type === "target")).toHaveLength(2);
     expect(room.session?.round?.result?.reveal).toContain("callouts");
   });
+  it("makes Secret Handshake reward mutual trust and expose a one-sided pact", () => {
+    const room = makeRoom(); setGame(room, "secret-handshake");
+    submissions(room, { p0: "reach:p1", p1: "reach:p0", p2: "reach:p0" });
+    expect(room.session?.round?.result?.basePoints).toEqual({ p0: 4, p1: 3, p2: -1 });
+    expect(room.session?.round?.result?.events).toContainEqual({ type: "alliance", playerId: "p0", targetId: "p1", mutual: true });
+    expect(room.session?.round?.result?.events).toContainEqual({ type: "betrayed", playerId: "p0", targetId: "p2" });
+  });
+  it("makes Hot Potato passes depend on the recipient and tracks who took the heat", () => {
+    const room = makeRoom(); setGame(room, "hot-potato");
+    submissions(room, { p0: "pass:p1", p1: "pass:p2", p2: "hold" });
+    expect(room.session?.round?.result?.basePoints).toEqual({ p0: 2, p1: 0, p2: 0 });
+    expect(room.session?.round?.result?.reasons.p2).toContain("−1");
+    expect(room.session?.round?.result?.events).toContainEqual({ type: "betrayed", playerId: "p2", targetId: "p1" });
+  });
+  it("makes a pass-back a failed escape", () => {
+    const room = makeRoom(2); setGame(room, "hot-potato");
+    submissions(room, { p0: "pass:p1", p1: "pass:p0" });
+    expect(room.session?.round?.result?.basePoints).toEqual({ p0: 0, p1: 0 });
+    expect(room.session?.round?.result?.reasons.p0).toContain("sent it straight back");
+  });
   it.each(Object.keys(MINIGAMES))("resolves %s deterministically", (gameId) => {
     const first = makeRoom(); const second = makeRoom();
     const number = gameId === "make-it-worse" ? 2 : 1;
     setGame(first, gameId, number); setGame(second, gameId, number);
-    const choice = first.session!.round!.config.options.find((option) => !option.id.startsWith("target:p0"))!.id;
-    const other = first.session!.round!.config.options.find((option) => option.id !== choice && !option.id.startsWith("target:p0"))?.id ?? choice;
-    for (const [room, values] of [[first, [choice, other, choice]], [second, [choice, other, choice]]] as const) submissions(room, Object.fromEntries(values.map((value, index) => [`p${index}`, value])));
+    const definition = MINIGAMES[gameId];
+    for (const room of [first, second]) submissions(room, Object.fromEntries(room.players.map((player) => [player.id, room.session!.round!.config.options.find((option) => definition.validate(option.id, { players: room.players, playerId: player.id, config: room.session!.round!.config }))!.id])));
     expect(first.session?.round?.result).toEqual(second.session?.round?.result);
   });
   it("applies persistent House Rules to a game result after its mechanic resolves", () => {
@@ -116,34 +138,51 @@ describe("authoritative party session engine", () => {
     expect(room.session?.round?.result?.points).toEqual({ p0: 0, p1: 7, p2: 6 });
     expect(room.session?.round?.result?.modifiers.p1).toEqual(["Double Down ×2: 2 → 4", "Underdog +1", "Bounty +2"]);
   });
+  it("enforces first commitment and applies a targeted loss shield server-side", () => {
+    const room = makeRoom(); setGame(room, "hot-potato", 2);
+    room.session!.activeRules = [
+      { id: "first-commit", name: "First on the Record", description: "Commit first.", activationPoint: "next-game", canStack: false, effect: { type: "forced-first", playerId: "p2" } },
+      { id: "safety-net", name: "Soft Landing", description: "Cannot lose points.", activationPoint: "next-game", canStack: false, effect: { type: "score-floor", playerId: "p0" } },
+    ];
+    room.session!.phase = "game-intro";
+    act(room, "p0", "begin-game");
+    expect(() => act(room, "p1", "submit", "pass:p0")).toThrow("commit first");
+    act(room, "p2", "submit", "pass:p0");
+    act(room, "p0", "submit", "hold");
+    act(room, "p1", "submit", "pass:p0");
+    expect(room.session?.round?.result?.basePoints.p0).toBe(-1);
+    expect(room.session?.round?.result?.points.p0).toBe(0);
+    expect(room.session?.round?.result?.modifiers.p0).toContain("Soft Landing +1");
+    expect(snapshot(room, "p1", now + 1).session?.round?.firstCommitPlayerId).toBe("p2");
+  });
   it("persists scores and rules across the session and derives awards only from recorded events", () => {
-    const room = makeRoom(); start(room);
+    const room = makeRoom(); setGame(room, "split-decision");
     submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" }); selectRule(room, "double-down");
     for (let game = 2; game <= 6; game++) {
       act(room, "p0", "continue-session"); act(room, "p0", "begin-game");
-      const option = room.session!.round!.config.options[0].id;
-      const choices = room.session!.round!.minigameId === "pile-on"
+      const gameId = room.session!.round!.minigameId;
+      const choices = gameId === "pile-on"
         ? { p0: "cash", p1: "target:p0", p2: "target:p0" }
-        : { p0: option, p1: option, p2: option };
+        : Object.fromEntries(room.players.map((player) => [player.id, room.session!.round!.config.options.find((option) => MINIGAMES[gameId].validate(option.id, { players: room.players, playerId: player.id, config: room.session!.round!.config }))!.id]));
       submissions(room, choices);
       selectRule(room, "double-down");
     }
-    expect(room.session?.history.map((item) => item.minigameId)).toEqual(DEFAULT_GAME_SLOTS);
+    expect(room.session?.history.map((item) => item.minigameId)).toEqual(room.session?.gameSlots);
     expect(room.session?.history[1].rules).toHaveLength(1);
-    expect(room.session?.round?.result?.modifiers.p0).toContain("Double Down ×32: 2 → 64");
+    expect(room.session?.round?.result?.modifiers.p0).toContain(`Double Down ×32: ${room.session!.round!.result!.basePoints.p0} → ${room.session!.round!.result!.basePoints.p0 * 32}`);
     act(room, "p0", "continue-session");
     expect(room.session?.phase).toBe("final-results");
     expect(room.session?.awards.some((award) => award.id === "best-read")).toBe(true);
     expect(room.session?.awards.some((award) => award.id === "worst-ally")).toBe(false);
   });
   it("enforces winner-only House Rule selection", () => {
-    const room = makeRoom(); start(room); submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" });
+    const room = makeRoom(); setGame(room, "split-decision"); submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" });
     expect(() => act(room, "p1", "open-rule-selection")).toThrow("winner");
     act(room, "p0", "open-rule-selection");
     expect(() => act(room, "p1", "select-rule", "double-down")).toThrow("winner");
   });
   it("resolves timed out rounds and reconnects with the same identity", () => {
-    const room = makeRoom(2); start(room); act(room, "p0", "submit", "RED");
+    const room = makeRoom(2); setGame(room, "split-decision"); act(room, "p0", "submit", "RED");
     expect(snapshot(room, "p1", now + 46_000).session?.phase).toBe("game-results");
     const before = room.players[1].seenAt; join(room, "p1", "Player One", now + 47_000);
     expect(room.players).toHaveLength(2); expect(room.players[1].seenAt).toBeGreaterThan(before);

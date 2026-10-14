@@ -25,16 +25,15 @@ function friendlyError(message: string) {
 }
 
 function houseRuleDescription(rule: HouseRule, players: Snapshot["players"]) {
-  if (rule.id !== "bounty") return rule.description;
-  const targetId = (rule.effect.type === "bounty" ? rule.effect.targetId : undefined);
+  const targetId = rule.effect.type === "bounty" ? rule.effect.targetId : rule.effect.type === "forced-first" || rule.effect.type === "score-floor" ? rule.effect.playerId : undefined;
   const target = players.find((player) => player.id === targetId)?.name;
   return target ? `Marked player: ${target}. ${rule.description}` : rule.description;
 }
 
 function houseRuleTarget(rule: HouseRule, players: Snapshot["players"]) {
   const effect = rule.effect;
-  if (effect.type !== "bounty") return undefined;
-  return players.find((player) => player.id === effect.targetId)?.name;
+  const targetId = effect.type === "bounty" ? effect.targetId : effect.type === "forced-first" || effect.type === "score-floor" ? effect.playerId : undefined;
+  return players.find((player) => player.id === targetId)?.name;
 }
 
 function OptionCard({ option, selected, disabled, onClick }: { option: GameOption; selected: boolean; disabled: boolean; onClick: () => void }) {
@@ -53,9 +52,12 @@ export default function ControlRoom() {
   const [network, setNetwork] = useState("Connecting");
   const [clock, setClock] = useState(0);
   const roomRef = useRef<Snapshot | null>(null);
+  const ignoredRoomId = useRef<string | null>(null);
   const offset = useRef(0);
 
   const accept = useCallback((snapshot: Snapshot) => {
+    if (snapshot.id === ignoredRoomId.current) return;
+    if (ignoredRoomId.current && snapshot.id !== ignoredRoomId.current) ignoredRoomId.current = null;
     const previous = roomRef.current;
     if (previous?.id === snapshot.id && previous.revision > snapshot.revision) return;
     roomRef.current = snapshot;
@@ -65,6 +67,7 @@ export default function ControlRoom() {
   }, []);
 
   const clearRoom = useCallback((message?: string) => {
+    ignoredRoomId.current = roomRef.current?.id ?? ignoredRoomId.current;
     roomRef.current = null;
     setRoom(null);
     localStorage.removeItem("cr-room");
@@ -157,7 +160,8 @@ export default function ControlRoom() {
   const leave = async () => {
     if (!room || busy) return;
     setBusy(true);
-    try { await call("leave", room.code); }
+    const departingName = room.players.find((player) => player.id === room.me)?.name ?? "";
+    try { await call("leave", room.code); setName(departingName); clearRoom(); }
     catch (cause) { setError(friendlyError(cause instanceof Error ? cause.message : "Could not leave.")); }
     finally { setBusy(false); }
   };
@@ -197,7 +201,7 @@ export default function ControlRoom() {
       : <>
         <div className="game-layout"><section className="game-main">
           {session.phase === "game-intro" && <div className="phase-card intro-phase"><div className="eyebrow">Game {session.gameNumber} of {session.gameSlots.length} · ready?</div><span className="game-icon"><Sparkles size={25} aria-hidden="true" /></span><h2>{currentGame?.displayName}</h2><p>{currentGame?.instructions}</p><div className="scenario-card"><strong>{session.gameConfig.title}</strong><span>{session.gameConfig.prompt}</span></div><div className="rule-explainer"><strong>How to score</strong><span>{session.gameConfig.scoreHint}</span><span>Your pick stays private until everyone has committed.</span></div>{host ? <button className="cta-button" disabled={busy} onClick={() => void run({ type: "begin-game" })}>Start game {session.gameNumber} <ArrowRight size={16} aria-hidden="true" /></button> : <p className="waiting-note">The host is about to start the round…</p>}</div>}
-          {session.phase === "active-game" && round && <div className="phase-card decision-phase"><div className="round-meta"><span>Game {round.number} of {session.gameSlots.length} · {currentGame?.displayName}</span><span className={seconds <= 5 ? "urgent" : ""}>00:{String(seconds).padStart(2, "0")}</span></div><h2>{round.config.title}</h2><p className="game-prompt">{round.config.prompt}</p>{session.activeRules.map((rule,index) => <div className="active-rule" key={`${rule.id}-${index}`}><span>House Rule · {rule.name}</span><strong>{houseRuleDescription(rule, room.players)}</strong></div>)}<div className="choice-grid">{round.config.options.map((option) => <OptionCard key={option.id} option={option} selected={round.myChoice === option.id} disabled={busy || Boolean(round.myChoice) || (option.id.startsWith("target:") && option.id === `target:${room.me}`)} onClick={() => void run({ type: "submit", value: option.id })}/>)}</div><div className="submitted-status"><span className={round.myChoice ? "status-check" : "status-dot"}>{round.myChoice ? <Check size={13} aria-hidden="true" /> : null}</span>{round.myChoice ? "Your choice is locked and hidden from the group." : "Choose one move. Everyone reveals together."}<span className="answered-count">{round.answeredCount}/{room.players.length} in</span></div><div className="answer-people">{room.players.map((player) => <span key={player.id} className={round.submittedIds.includes(player.id) ? "answered" : ""}>{round.submittedIds.includes(player.id) ? <Check size={12} aria-hidden="true" /> : <Circle size={10} aria-hidden="true" />}{player.name}</span>)}</div></div>}
+          {session.phase === "active-game" && round && <div className="phase-card decision-phase"><div className="round-meta"><span>Game {round.number} of {session.gameSlots.length} · {currentGame?.displayName}</span><span className={seconds <= 5 ? "urgent" : ""}>00:{String(seconds).padStart(2, "0")}</span></div><h2>{round.config.title}</h2><p className="game-prompt">{round.config.prompt}</p>{session.activeRules.map((rule,index) => <div className="active-rule" key={`${rule.id}-${index}`}><span>House Rule · {rule.name}</span><strong>{houseRuleDescription(rule, room.players)}</strong></div>)}{round.firstCommitPlayerId && <div className="first-commit-note">{room.players.find((player) => player.id === round.firstCommitPlayerId)?.name} must commit first. Their choice stays hidden.</div>}<div className="choice-grid">{round.config.options.map((option) => <OptionCard key={option.id} option={option} selected={round.myChoice === option.id} disabled={busy || Boolean(round.myChoice) || (round.firstCommitPlayerId !== null && !round.submittedIds.includes(round.firstCommitPlayerId) && room.me !== round.firstCommitPlayerId) || (option.id.startsWith("target:") && option.id === `target:${room.me}`)} onClick={() => void run({ type: "submit", value: option.id })}/>)}</div><div className="submitted-status"><span className={round.myChoice ? "status-check" : "status-dot"}>{round.myChoice ? <Check size={13} aria-hidden="true" /> : null}</span>{round.myChoice ? "Your choice is locked and hidden from the group." : round.firstCommitPlayerId && !round.submittedIds.includes(round.firstCommitPlayerId) && room.me !== round.firstCommitPlayerId ? "Waiting for the marked player to commit first." : "Choose one move. Everyone reveals together."}<span className="answered-count">{round.answeredCount}/{room.players.length} in</span></div><div className="answer-people">{room.players.map((player) => <span key={player.id} className={round.submittedIds.includes(player.id) ? "answered" : ""}>{round.submittedIds.includes(player.id) ? <Check size={12} aria-hidden="true" /> : <Circle size={10} aria-hidden="true" />}{player.name}</span>)}</div></div>}
           {session.phase === "game-results" && round?.result && <div className="phase-card results-phase"><div className="eyebrow">GAME {session.gameNumber} RESULTS · {currentGame?.displayName}</div><h2>{round.result.reveal}</h2><p>{round.result.optionCounts && Object.values(round.result.optionCounts).reduce((sum, count) => sum + count, 0)} choices hit the table.</p><div className="reveal-groups">{round.config.options.map((option) => <div className="reveal-group" key={option.id}><strong>{option.label}</strong><span>{round.result!.optionCounts[option.id] ?? 0} picked</span><p>{room.players.filter((player) => round.result!.choices[player.id] === option.id).map((player) => player.name).join(", ") || "Nobody"}</p></div>)}</div><div className="reveal-list">{room.players.map((player) => <div className="reveal-row" key={player.id}><span className="reveal-name">{player.name}{player.id === winner?.id && <small>Round winner</small>}</span><b>{round.config.options.find((option) => option.id === round.result!.choices[player.id])?.label ?? "NO PICK"}</b><span className="earned">{round.result!.points[player.id] > 0 ? "+" : ""}{round.result!.points[player.id] ?? 0}</span><small className="reason">{round.result!.reasons[player.id]}</small></div>)}</div><div className="rule-selection"><h3>{winner?.id === room.me ? "Choose a House Rule." : `${winner?.name ?? "The winner"} chooses a House Rule.`}</h3>{winner?.id === room.me ? <button className="cta-button" disabled={busy} onClick={() => void run({ type: "open-rule-selection" })}>Choose a House Rule <ArrowRight size={16}/></button> : <p className="waiting-note">Waiting for the game winner…</p>}</div></div>}
           {session.phase === "house-rule-selection" && <div className="phase-card results-phase"><div className="eyebrow">WINNER’S PICK · {winner?.name}</div><h2>Change what comes next.</h2><p>House Rules stay active in later games.</p><div className="rule-selection">{session.offeredRules.map((rule, index) => <button className="rule-card" key={`${rule.id}-${index}`} disabled={busy || winner?.id !== room.me} onClick={() => void run({ type: "select-rule", value: rule.id })}><span>HOUSE RULE{rule.canStack ? " · STACKS" : ""}</span><strong>{rule.name}</strong><small>{houseRuleTarget(rule, room.players) ? `Marked player: ${houseRuleTarget(rule, room.players)}. ` : ""}{rule.description}</small></button>)}</div></div>}
           {session.phase === "intermission" && <div className="phase-card results-phase intermission"><div className="eyebrow">GAME {session.gameNumber} COMPLETE · SESSION {session.gameNumber}/{session.gameSlots.length}</div><h2>{session.newlyActivatedRule ? `${session.newlyActivatedRule.name} is in play.` : "Final game complete."}</h2><div className="standings"><h3>Standings</h3>{scoreRows.map((player,index)=><div className="standing-row" key={player.id}><span>{index+1}</span><strong>{player.name}</strong><b>{session.scores[player.id] ?? 0} pts</b></div>)}</div><div className="active-rule"><span>NEW HOUSE RULE</span><strong>{session.newlyActivatedRule?.name ?? "No new rule"}{session.newlyActivatedRule ? ` · ${houseRuleDescription(session.newlyActivatedRule, room.players)}` : ""}</strong></div><div className="rule-explainer"><strong>All active House Rules</strong>{session.activeRules.map((rule,index)=><span key={`${rule.id}-${index}`}>{rule.name}: {houseRuleDescription(rule,room.players)}</span>)}</div><p>Next up · {session.gameNumber < session.gameSlots.length ? MINIGAMES[session.gameSlots[session.gameNumber]]?.displayName : "Final standings"}</p>{host ? <button className="cta-button" disabled={busy} onClick={() => void run({ type: "continue-session" })}>{session.gameNumber < session.gameSlots.length ? "Next game" : "See final results"} <ArrowRight size={16}/></button> : <p className="waiting-note">Waiting for the host to continue…</p>}</div>}
