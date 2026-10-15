@@ -5,7 +5,7 @@ import type { Snapshot } from "../lib/types";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 
-test("two friends complete and replay a full mobile session without horizontal overflow", async ({ browser }) => {
+test("two friends complete a full mobile session without horizontal overflow", async ({ browser }) => {
   test.setTimeout(900000);
   const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
   const [host, guest] = await Promise.all(contexts.map((context) => context.newPage()));
@@ -40,7 +40,7 @@ test("two friends complete and replay a full mobile session without horizontal o
       expect(size.scroll).toBeLessThanOrEqual(size.width);
     }
     await host.getByRole("button", { name: "Start the party" }).click();
-    const firstLineup = latest.get(host)!.session!.gameSlots;
+    await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
     const playSession = async () => {
       for (let number = 1; number <= 6; number++) {
         if (number > 1) {
@@ -79,15 +79,9 @@ test("two friends complete and replay a full mobile session without horizontal o
       await host.getByRole("button", { name: "Reveal party awards" }).click();
     };
     const pagesFor = (playerId: string) => [host, guest].find((page) => latest.get(page)?.me === playerId)!;
-    await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
     await playSession();
     await expect(host.getByRole("button", { name: "Reveal session records" })).toBeVisible();
     await host.getByRole("button", { name: "Reveal session records" }).click();
-    await host.getByRole("button", { name: "Run it back with new games" }).click();
-    await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
-    expect(latest.get(host)?.session?.gameSlots).not.toEqual(firstLineup);
-    expect(latest.get(host)?.players.map((player) => player.id)).toEqual(expect.arrayContaining([latest.get(host)!.me, latest.get(guest)!.me]));
-    await playSession();
   } finally {
     if (roomCode) {
       await host.getByRole("button", { name: "Leave room" }).click({ timeout: 3000 }).catch(() => {});

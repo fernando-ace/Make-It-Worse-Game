@@ -14,4 +14,8 @@ The same engine suite validates feasible objective assignment from the actual se
 
 ## Limits
 
-This simulation does not estimate player enjoyment, live network reliability, or win-rate balance. The deterministic checks sample the listed seeds and player counts; live Supabase browser coverage is separate. Public-beta readiness still depends on completing the real multiplayer, reconnect, replay, browser, and responsive validations described in the README.
+This simulation does not estimate player enjoyment, live network reliability, or win-rate balance. The deterministic checks sample the listed seeds and player counts; the real multiplayer, reconnect, replay, browser, and responsive validations are separate and summarized below. No claim of mathematically optimal balance is made.
+
+## Browser verification
+
+On 2026-10-14, the two-player 390px browser test completed one six-game session in 57.8 seconds. The configured Supabase test completed two consecutive six-game sessions with three players in 2.8 minutes, including reconnect, private information, rotating powers, objective reveal, awards, score progression, and replay reset checks. Final source validation passed: 88 Vitest tests, ESLint, TypeScript, and the production build. These results are local to this run and do not claim deployed or physical-device evidence.

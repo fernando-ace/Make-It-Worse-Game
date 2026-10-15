@@ -63,6 +63,6 @@ npm run test:live
 npm run test:party
 ```
 
-Vitest covers game input/resolution, privacy, deterministic scoring, 1,001 Session Director seeds, objectives, powers, replay, and API behavior. `test:live` completes a six-game three-player session against the configured Supabase project, including reconnect, private state, powers, awards, and same-room replay. `test:party` checks mobile party flow at 390px and horizontal overflow. These live checks create temporary test rooms/users and clean them up.
+Vitest covers game input/resolution, privacy, deterministic scoring, 1,001 Session Director seeds, objectives, powers, replay, and API behavior. `test:live` completes two consecutive six-game, three-player sessions against the configured Supabase project, including reconnect, private state, powers, awards, and same-room replay. `test:party` completes a six-game, two-player session at 390px and checks horizontal overflow after every round. These live checks create temporary test rooms/users and clean them up.
 
 See [docs/session-simulation.md](docs/session-simulation.md) for the deterministic simulation coverage and findings.

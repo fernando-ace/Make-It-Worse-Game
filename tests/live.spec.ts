@@ -113,7 +113,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     const round = latest.get(host)?.session?.round;
     const choice = round?.config.options.find((option) => option.label === label)?.id;
     expect(choice).toBeTruthy();
-    await page.locator(".choice-button").filter({ hasText: label }).first().click();
+    await page.locator(".choice-button").getByText(label, { exact: true }).first().click();
     await expect.poll(() => latest.get(page)?.session?.round?.myChoice, { timeout: 60000 }).toBe(choice);
   }
   async function finishRound(rule: string) {
@@ -151,6 +151,14 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     expect(latest.get(page)?.session?.objectiveReveal).toBeUndefined();
   }
   const byId = (id: string) => pages.find((page) => latest.get(page)?.me === id)!;
+  async function firstCommitPage() {
+    const playerId = latest.get(host)?.session?.round?.firstCommitPlayerId;
+    if (!playerId) return null;
+    await expect.poll(() => pages.some((page) => latest.get(page)?.me === playerId), { timeout: 60000 }).toBe(true);
+    const page = byId(playerId);
+    expect(page).toBeTruthy();
+    return page;
+  }
   const labelFor = (gameId: string, playerName: string, options: GameOption[]) => {
     if (gameId === "split-decision") return playerName === "Host" ? "RED" : "BLUE";
     if (gameId === "make-it-worse") return playerName === "Host" ? options[0].label : options[1].label;
@@ -174,7 +182,8 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   for (let number = 1; number <= 6; number++) {
     const { options, gameId } = await startRound(number);
     if (gameId === "make-it-worse") expect(latest.get(host)?.session?.round?.config.promptId).toBeTruthy();
-    if (["trust-me", "pile-on", "secret-handshake", "hot-potato", "favor-bank", "lifeline"].includes(gameId)) {
+    if (gameId === "lifeline") expect(options).toHaveLength(3);
+    if (["trust-me", "pile-on", "secret-handshake", "hot-potato", "favor-bank"].includes(gameId)) {
       expect(options.length).toBeGreaterThanOrEqual(4);
     }
     if (number === 4) {
@@ -194,17 +203,19 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       expect(latest.get(guestOne)?.session?.myPowers).toEqual([]);
     }
     const round = latest.get(host)!.session!.round!;
-    const firstPage = round.firstCommitPlayerId ? byId(round.firstCommitPlayerId) : null;
+    const firstPage = await firstCommitPage();
     const orderedPages = firstPage ? [firstPage, ...pages.filter((page) => page !== firstPage)] : pages;
     if (number === 2) {
+      const commitPage = firstPage ?? pages[0];
       if (round.firstCommitPlayerId) {
-        const waitingPage = pages.find((page) => page !== firstPage)!;
+        const waitingPage = pages.find((page) => page !== commitPage)!;
         await expect(waitingPage.locator(".first-commit-note")).toBeVisible();
         await expect(waitingPage.locator(".choice-button").first()).toBeDisabled();
       }
-      const commitLabel = labelFor(gameId, latest.get(firstPage!)!.players.find((player) => player.id === round.firstCommitPlayerId)?.name ?? "Host", options);
-      await choose(firstPage!, commitLabel);
-      const reconnectPage = pages.find((page) => page !== firstPage)!;
+      const commitName = latest.get(commitPage)!.players.find((player) => player.id === latest.get(commitPage)!.me)?.name ?? "Host";
+      const commitLabel = labelFor(gameId, commitName, options);
+      await choose(commitPage, commitLabel);
+      const reconnectPage = pages.find((page) => page !== commitPage)!;
       const objectiveBeforeReload = latest.get(reconnectPage)?.session?.myObjective;
       await reconnectPage.reload();
       await expect(reconnectPage.locator(".connection")).toHaveText("Connected");
@@ -212,7 +223,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       expect(latest.get(reconnectPage)?.session?.round?.myChoice).toBeNull();
       expect(latest.get(reconnectPage)?.session?.round).not.toHaveProperty("submissions");
       expect(latest.get(reconnectPage)?.session?.myObjective).toEqual(objectiveBeforeReload);
-      for (const page of pages.filter((candidate) => candidate !== firstPage)) await choose(page, labelFor(gameId, latest.get(page)!.players.find((player) => player.id === latest.get(page)!.me)?.name ?? "", options));
+      for (const page of pages.filter((candidate) => candidate !== commitPage)) await choose(page, labelFor(gameId, latest.get(page)!.players.find((player) => player.id === latest.get(page)!.me)?.name ?? "", options));
     } else {
       for (const page of orderedPages) {
         const playerName = latest.get(page)!.players.find((player) => player.id === latest.get(page)!.me)?.name ?? "";
@@ -253,11 +264,30 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   const retry = latest.get(host)!;
   expect(retry.session?.gameSlots).not.toEqual(selectedGames);
   expect(retry.session?.myChaos).toBe(2);
+  expect(retry.session?.myPowers).toEqual([]);
+  expect(retry.session?.activeRules).toEqual([]);
+  expect(retry.session?.myObjective).toBeTruthy();
   expect(retry.players).toHaveLength(3);
   for (const page of pages) {
     const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
     expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
   }
+  for (let number = 1; number <= 6; number++) {
+    const { options, gameId } = await startRound(number);
+    const firstPage = await firstCommitPage();
+    const orderedPages = firstPage ? [firstPage, ...pages.filter((page) => page !== firstPage)] : pages;
+    for (const page of orderedPages) {
+      const playerName = latest.get(page)!.players.find((player) => player.id === latest.get(page)!.me)?.name ?? "";
+      await choose(page, labelFor(gameId, playerName, options));
+    }
+    await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
+    await finishRound("");
+  }
+  await host.getByRole("button", { name: "See final results" }).click();
+  await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
+  expect(latest.get(host)?.session?.history).toHaveLength(6);
+  expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
+  expect(latest.get(host)?.session?.awards.length).toBeGreaterThan(0);
   await host.getByRole("button", { name: "Leave room" }).click();
   await expect(host.getByLabel("Your name")).toHaveValue("Host");
 });
