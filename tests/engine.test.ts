@@ -252,6 +252,18 @@ describe("authoritative party session engine", () => {
     expect(awards.find((award) => award.id === "most-betrayed")?.playerId).toBe("p0");
     expect(awards.find((award) => award.id === "worst-ally")?.playerId).toBe("p2");
   });
+  it("resolves event-award ties by stable room order", () => {
+    const players = makeRoom(2).players;
+    const result: MinigameResolution = {
+      choices: { p0: "target:p1", p1: "target:p0" }, basePoints: { p0: 1, p1: 1 }, points: { p0: 1, p1: 1 },
+      reasons: { p0: "Targeted", p1: "Targeted" }, modifiers: { p0: [], p1: [] }, optionCounts: {},
+      events: [{ type: "target", actorId: "p0", targetId: "p1" }, { type: "target", actorId: "p1", targetId: "p0" }], reveal: "Both players were targeted once.",
+    };
+    const first = resolveAwards([{ result }], players).find((award) => award.id === "most-targeted");
+    const second = resolveAwards([{ result }], players).find((award) => award.id === "most-targeted");
+    expect(first).toMatchObject({ playerId: "p0", count: 1 });
+    expect(second).toEqual(first);
+  });
   it.each([
     ["split-decision", { p1: "RED", p0: "RED", p2: "RED", p3: "BLUE" }],
     ["make-it-worse", { p1: "wedding-toast-1", p0: "wedding-toast-0", p2: "wedding-toast-1", p3: "wedding-toast-1" }],

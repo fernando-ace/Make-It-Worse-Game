@@ -57,12 +57,13 @@ Never commit `.env.local` or expose the server key through a `NEXT_PUBLIC_` vari
 npm run lint
 npm run typecheck
 npm test
+npm run test:simulation
 npm run build
 # Requires configured real Supabase credentials and anonymous sign-in:
 npm run test:live
 npm run test:party
 ```
 
-Vitest covers game input/resolution, privacy, deterministic scoring, 1,001 Session Director seeds, objectives, powers, replay, and API behavior. `test:live` completes two consecutive six-game, three-player sessions against the configured Supabase project, including reconnect, private state, powers, awards, and same-room replay. `test:party` completes a six-game, two-player session at 390px and checks horizontal overflow after every round. These live checks create temporary test rooms/users and clean them up.
+Vitest covers game input/resolution, privacy, deterministic scoring, 1,001 Session Director lineups, objectives, powers, replay, and API behavior. `test:simulation` runs 1,000 complete seeded sessions across 2–8 players. `test:live` completes two consecutive six-game, three-player sessions against the configured Supabase project, including reconnect, private state, powers, awards, and same-room replay. `test:party` completes a six-game, two-player session at 390px and checks horizontal overflow after every round. These live checks create temporary test rooms/users and clean them up.
 
 See [docs/session-simulation.md](docs/session-simulation.md) for the deterministic simulation coverage and findings.
