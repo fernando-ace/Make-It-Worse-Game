@@ -31,5 +31,5 @@ export function createRoomInvite(origin: string, code: string) {
   const url = new URL("/", origin);
   url.searchParams.set("room", code);
   const link = url.toString();
-  return { url: link, text: `Join my Control Room party: ${link}\nRoom code: ${code}` };
+  return { url: link, text: `Join my Make It Worse party: ${link}\nRoom code: ${code}` };
 }
