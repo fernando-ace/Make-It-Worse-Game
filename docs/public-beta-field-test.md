@@ -1,6 +1,6 @@
 # Make It Worse public beta field test
 
-**Production:** https://control-room-orcin.vercel.app
+**Production:** https://make-it-worse-game.vercel.app
 
 ## Try it with a group
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  metadataBase: new URL("https://control-room-orcin.vercel.app"),
+  metadataBase: new URL("https://make-it-worse-game.vercel.app"),
   alternates: { canonical: "/" },
   title: "Make It Worse | Multiplayer Party Game",
   description: "Start a room, invite 1–7 friends, and play six quick multiplayer party games from any phone or computer.",
