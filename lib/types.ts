@@ -78,6 +78,7 @@ export type PartySession = {
   scores: Record<string, number>;
   seed: string;
   objectives: Record<string, ObjectiveState>;
+  objectivesRevealedBy: string[];
   chaos: Record<string, number>;
   activePowers: ActivePower[];
   scoreProgression: Array<Record<string, number>>;
@@ -108,7 +109,7 @@ export type Room = { id: string; code: string; hostId: string; revision: number;
 export type Action = { type: string; value?: string | number | boolean };
 export type Snapshot = {
   id: string; code: string; hostId: string; revision: number; players: Player[]; me: string; serverNow: number; chaosIntensity: ChaosIntensity;
-  session: (Omit<PartySession, "round" | "seed" | "objectives" | "chaos" | "activePowers"> & {
+  session: (Omit<PartySession, "round" | "seed" | "objectives" | "objectivesRevealedBy" | "chaos" | "activePowers"> & {
     round: (Omit<PartyRound, "submissions"> & { answeredCount: number; myChoice: string | null; submittedIds: string[] }) | null;
     myObjective: ObjectiveState; myChaos: number; myPowers: ActivePower[]; myPowerOffers: PowerId[]; myIntel: { playerId: string; playerName: string; choice: string } | null; objectiveReveal?: Record<string, ObjectiveState>;
   }) | null;

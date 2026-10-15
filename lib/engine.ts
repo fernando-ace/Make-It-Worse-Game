@@ -51,6 +51,7 @@ function createSession(room: Room, seed = randomBytes(16).toString("hex"), avoid
   return {
     phase: "game-intro", gameNumber: 1, gameSlots, seed: selectedSeed, chaosIntensity,
     objectives: assignObjectives(selectedSeed, room.players, gameSlots),
+    objectivesRevealedBy: [],
     chaos: Object.fromEntries(room.players.map((player) => [player.id, chaosIntensity === "high" ? 3 : 2])), activePowers: [], scoreProgression: [Object.fromEntries(room.players.map((player) => [player.id, 0]))],
     gameConfig: firstGame.config({ players: room.players, gameNumber: 1 }),
     scores: Object.fromEntries(room.players.map((player) => [player.id, 0])), round: null,
@@ -63,6 +64,7 @@ function hydrateSession(room: Room) {
   if (!session) return;
   if (!session.seed) session.seed = `${room.id}:legacy-session`;
   if (!session.objectives) session.objectives = assignObjectives(session.seed, room.players, session.gameSlots);
+  if (!session.objectivesRevealedBy) session.objectivesRevealedBy = [];
   if (!session.chaos) session.chaos = Object.fromEntries(room.players.map((player) => [player.id, 2]));
   if (!session.activePowers) session.activePowers = [];
   if (!session.scoreProgression) session.scoreProgression = [Object.fromEntries(room.players.map((player) => [player.id, 0]))];
@@ -387,6 +389,11 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
       finishSession(room, session);
       break;
     }
+    case "reveal-objectives": {
+      if (!session || session.phase !== "final-results") throw new Error("Finish the session before revealing objectives");
+      if (!session.objectivesRevealedBy.includes(uid)) session.objectivesRevealedBy.push(uid);
+      break;
+    }
     default: throw new Error("Unknown action");
   }
   room.processed = [...room.processed.slice(-255), actionId];
@@ -408,11 +415,12 @@ export function snapshot(room: Room, uid: string, now: number): Snapshot {
       const scout = session.phase === "active-game" ? session.activePowers.find((power) => power.actorId === uid && power.id === "scout") : undefined;
       const scoutedChoice = scout?.targetId ? session.round?.submissions[scout.targetId] : undefined;
       const myIntel = scout?.targetId && scoutedChoice ? { playerId: scout.targetId, playerName: room.players.find((player) => player.id === scout.targetId)?.name ?? "Player", choice: scoutedChoice } : null;
-      const objectiveReveal = session.phase === "final-results" ? structuredClone(publicSession.objectives) : undefined;
+      const objectiveReveal = session.phase === "final-results" && session.objectivesRevealedBy.includes(uid) ? structuredClone(publicSession.objectives) : undefined;
       delete (publicSession as unknown as Record<string, unknown>).seed;
       delete (publicSession as unknown as Record<string, unknown>).objectives;
       delete (publicSession as unknown as Record<string, unknown>).chaos;
       delete (publicSession as unknown as Record<string, unknown>).activePowers;
+      delete (publicSession as unknown as Record<string, unknown>).objectivesRevealedBy;
       return { ...publicSession, myObjective, myChaos, myPowers, myPowerOffers, myIntel, ...(objectiveReveal ? { objectiveReveal } : {}), round: session.round ? {
       number: session.round.number, minigameId: session.round.minigameId, startedAt: session.round.startedAt, deadlineAt: session.round.deadlineAt, config: structuredClone(session.round.config),
       firstCommitPlayerId: session.round.firstCommitPlayerId, result: session.round.result ? structuredClone(session.round.result) : null, answeredCount: Object.keys(session.round.submissions).length,

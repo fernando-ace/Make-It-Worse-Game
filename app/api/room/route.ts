@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomInt, randomUUID } from "node:crypto";
 import { admin } from "@/lib/server";
+import { betaSessionKey, recordBetaEvents, type BetaEvent } from "@/lib/beta";
 import { apply, join, snapshot } from "@/lib/engine";
 import type { Room } from "@/lib/types";
 export const runtime = "nodejs";
@@ -56,10 +57,15 @@ export async function POST(req: NextRequest) {
           processed: [],
         };
         const { error } = await db.rpc("cr_create", { p_room: room });
-        if (!error)
+        if (!error) {
+          await recordBetaEvents(db, [
+            { name: "room_created", roomId: room.id, playerCount: 1, chaosIntensity: room.chaosIntensity },
+            { name: "lobby_reached", roomId: room.id, playerCount: 1 },
+          ]);
           return NextResponse.json(snapshot(room, uid, now), {
             headers: { "Cache-Control": "no-store" },
           });
+        }
         if (error.code !== "23505") throw new Error(error.message);
       }
       throw new Error("Could not allocate a room code. Try again.");
@@ -74,6 +80,8 @@ export async function POST(req: NextRequest) {
       const room = data.room as Room,
         now = Number(data.now);
       const revision = room.revision;
+      const before = structuredClone(room);
+      const alreadyMember = room.players.some((player) => player.id === uid);
       if (body.op === "join") join(room, uid, name, now);
       else if (body.op === "leave" || body.op === "kick") {
         const targetId = body.op === "leave" ? uid : String(body.targetId ?? "");
@@ -117,6 +125,7 @@ export async function POST(req: NextRequest) {
       );
       if (commitError) throw new Error(commitError.message);
       if (committed) {
+        await recordBetaEvents(db, committedEvents(before, room, body.op, body.action, alreadyMember, uid));
         if (body.op === "leave")
           return NextResponse.json(
             { left: true },
@@ -142,4 +151,46 @@ export async function POST(req: NextRequest) {
       { status: message.startsWith("Server configuration") ? 503 : 400 },
     );
   }
+}
+
+function committedEvents(before: Room, after: Room, op: string, action: { type?: string; value?: string | number | boolean } | undefined, alreadyMember: boolean, uid: string): BetaEvent[] {
+  const events: BetaEvent[] = [];
+  const session = after.session;
+  const previousSession = before.session;
+  const sessionKey = session ? betaSessionKey(after.id, session.seed) : undefined;
+  const gameNumber = session?.gameNumber;
+  const gameId = session && gameNumber ? session.gameSlots[gameNumber - 1] : undefined;
+  const base = { roomId: after.id, sessionKey, gameNumber, gameId, playerCount: after.players.length, chaosIntensity: session?.chaosIntensity ?? after.chaosIntensity };
+  const add = (name: BetaEvent["name"], fields: Partial<BetaEvent> = {}) => events.push({ name, ...base, ...fields });
+
+  if (op === "join") {
+    if (!alreadyMember) add("room_joined");
+    add("lobby_reached");
+  } else if (op === "leave" || op === "kick") {
+    add("player_left", { playerCount: after.players.length });
+  } else if (op === "action" && action) {
+    if (action.type === "set-chaos-intensity") add("chaos_intensity_selected", { chaosIntensity: after.chaosIntensity });
+    if (!previousSession && session) add("session_started");
+    if (previousSession?.phase === "final-results" && session?.phase === "game-intro") {
+      add("replay_started");
+      add("session_started");
+    }
+    if (previousSession?.phase !== "active-game" && session?.phase === "active-game") {
+      add("game_started");
+      add("session_round_reached");
+    }
+    if (previousSession?.phase === "active-game" && session?.phase === "game-results") add("game_completed");
+    if (action.type === "use-power" && typeof action.value === "string") add("power_used", { powerId: action.value.split(":", 1)[0] });
+    if (action.type === "reveal-objectives" && !previousSession?.objectivesRevealedBy.includes(uid) && session?.objectivesRevealedBy.includes(uid)) add("objective_revealed");
+    if (action.type === "select-rule" && session?.history.at(-1)?.selectedRule) add("house_rule_selected", { houseRuleId: session.history.at(-1)!.selectedRule!.id });
+    if (session) {
+      const priorObjectives = previousSession?.objectives ?? {};
+      for (const [playerId, objective] of Object.entries(session.objectives)) {
+        if (objective.completed && !priorObjectives[playerId]?.completed) add("objective_completed");
+      }
+    }
+    if ((previousSession?.gameNumber ?? 0) < 6 && gameNumber === 6) add("finale_reached");
+    if (previousSession?.phase !== "final-results" && session?.phase === "final-results") add("session_completed");
+  }
+  return events;
 }

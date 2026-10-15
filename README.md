@@ -29,7 +29,60 @@ Each `MinigameDefinition` supplies an id, short instructions, options/configurat
 
 `lib/engine.ts` owns room transitions, session progression, input validation, deterministic outcomes, scoring, Chaos, powers, and objective progress. `snapshot()` returns a role-filtered view: canonical seeds, objectives, active powers, unrevealed submissions, and other players' private intel stay server-side. A reconnect receives the same player's permitted state. Do not move identity, time, outcomes, or canonical scores to client input.
 
-`app/api/room/route.ts` authenticates each request with Supabase `getUser`, checks room membership, and commits through the revision-checked database RPC. Supabase Realtime prompts clients to sync; polling repairs missed notifications. Existing SQL boundaries and migrations are sufficient; no schema change is needed for the session systems.
+`app/api/room/route.ts` authenticates each request with Supabase `getUser`, checks room membership, and commits through the revision-checked database RPC. Supabase Realtime prompts clients to sync; polling repairs missed notifications. The public beta adds server-recorded lifecycle telemetry, private post-game feedback, and scheduled expiration for abandoned room state.
+
+## Public beta data
+
+Telemetry is stored in the non-exposed `cr_private.beta_events` table. Database timestamps and an opaque session hash correlate events; player IDs, names, game answers, objective contents, auth tokens, and arbitrary client payloads are never stored. Server-verified lifecycle events include room creation/join, lobby reach, session and round progression, game completion, Chaos settings, House Rules, powers, objective completion/reveal, reconnects, departures, finale/completion, replay, feedback, and coarse runtime-error categories. A browser can send only landing, reconnect, feedback-open, and error-category events; the server derives the rest, including objective reveals, from committed game state.
+
+Feedback is stored separately in `cr_private.beta_feedback`, never returned to other players, and keyed for duplicate prevention by a session-scoped HMAC. It captures a 1–5 fun rating, replay intent, favorite and least-favorite game, confusion notes, and optional comments. The form asks players not to include names, contact details, or private game choices; email addresses, phone-like strings, and URLs in free text are redacted before storage.
+
+The Vercel Cron Job calls `/api/cron/cleanup` daily using the production-only `CRON_SECRET`. It removes room state after 14 days without activity, telemetry after 180 days, and feedback after 365 days. Active rooms keep updating their activity timestamp; expired invite links lead back to the normal “room not available” recovery flow.
+
+For a quick beta readout, open the Supabase SQL editor for the configured project and run:
+
+```sql
+select event_name, date_trunc('day', occurred_at) as day,
+       count(*) as events, count(distinct session_key) as sessions
+from cr_private.beta_events
+where occurred_at >= now() - interval '30 days'
+group by 1, 2 order by 2 desc, 1;
+
+select fun_rating, play_again, favorite_game, least_favorite_game,
+       confusion, comment, created_at
+from cr_private.beta_feedback
+where created_at >= now() - interval '30 days'
+order by created_at desc;
+```
+
+The event table has a fixed payload shape: `event_name`, database `occurred_at`, optional opaque `session_key`, optional `room_id` (only on room-specific records), `game_id`, `game_number`, `player_count`, `chaos_intensity`, `house_rule_id`, `power_id`, and coarse `error_code`. No player or auth identifiers, names, answers, objective text, or free-form event properties are accepted. The session key is SHA-256 of the room ID and server-only session seed. Automated live tests can also create lifecycle telemetry and should be excluded from product conclusions by their validation window.
+
+| Event | Meaning |
+| --- | --- |
+| `landing_viewed` | A browser loaded the landing page in this tab session. |
+| `room_created` | The server created a room. |
+| `room_joined` | A new member joined a room. |
+| `lobby_reached` | The server observed a member in the lobby. |
+| `session_started` | The room began a game session. |
+| `chaos_intensity_selected` | The committed room setting changed. |
+| `game_started` | A round entered active play. |
+| `session_round_reached` | The session advanced to a round number. |
+| `game_completed` | A round result was committed. |
+| `house_rule_selected` | A House Rule was committed for a round. |
+| `power_used` | A power action was committed. |
+| `objective_completed` | The server counted an objective completion without recording its text. |
+| `objective_revealed` | A member explicitly requested their post-game objective reveal. |
+| `reconnect_attempted` | A browser began its reconnect flow. |
+| `reconnect_succeeded` / `reconnect_failed` | The reconnect flow recovered or failed, by coarse error category. |
+| `player_left` | A member left or was removed from the room. |
+| `finale_reached` | The session entered its finale. |
+| `session_completed` | The final result was committed. |
+| `replay_started` | A completed room started another session. |
+| `feedback_opened` | A revealed player opened the optional feedback form. |
+| `feedback_submitted` | The server stored the member's optional feedback. |
+| `runtime_error` | The browser reported a coarse auth, network, server, or unknown error category. |
+
+The feedback query above is for authorized project operators; do not export or share free-text responses without reviewing them for identifying details.
 
 ## Running locally
 
@@ -48,8 +101,9 @@ Set these values in `.env.local` and in the hosting environment:
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | Yes |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key (legacy anon key also works) | Yes |
 | `SUPABASE_SECRET_KEY` | Server-only key used by room API routes | No |
+| `CRON_SECRET` | Vercel Cron bearer secret used by the cleanup route | No |
 
-Never commit `.env.local` or expose the server key through a `NEXT_PUBLIC_` variable. Enable Anonymous Sign-ins, apply the migrations in `supabase/migrations/`, and confirm `cr_rooms` is in the `supabase_realtime` publication. For an existing linked project, inspect its migration history before changing it.
+Never commit `.env.local` or expose the server key or cron secret through a `NEXT_PUBLIC_` variable. Enable Anonymous Sign-ins, apply the migrations in `supabase/migrations/`, and confirm `cr_rooms` is in the `supabase_realtime` publication. For an existing linked project, inspect its migration history before changing it.
 
 ## Validation
 
@@ -67,3 +121,9 @@ npm run test:party
 Vitest covers game input/resolution, privacy, deterministic scoring, 1,001 Session Director lineups, objectives, powers, replay, and API behavior. `test:simulation` runs 1,000 complete seeded sessions across 2–8 players. `test:live` completes two consecutive six-game, three-player sessions against the configured Supabase project, including reconnect, private state, powers, awards, and same-room replay. `test:party` completes a six-game, two-player session at 390px and checks horizontal overflow after every round. These live checks create temporary test rooms/users and clean them up.
 
 See [docs/session-simulation.md](docs/session-simulation.md) for the deterministic simulation coverage and findings.
+
+## Production release and field testing
+
+The production Vercel project is connected to the `master` branch. Before release, inspect the exact commit and migration history, run the validation suite above, apply only reviewed pending migrations, and push the reviewed commit to `master`. Verify the resulting Vercel production deployment, smoke test the public URL and multiplayer flows, and inspect Vercel function logs. If a release is broken, roll back to the last known-good production deployment and then fix forward. Keep preview deployments protected; production must remain publicly reachable.
+
+Use [docs/public-beta-field-test.md](docs/public-beta-field-test.md) for a short group play test, device checklist, questions, and issue severity guide.

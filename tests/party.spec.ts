@@ -13,6 +13,11 @@ test("two friends complete a full mobile session without horizontal overflow", a
   const authUserIds = new Set<string>();
   const latest = new Map<Page, Snapshot>();
   for (const page of [host, guest]) {
+    page.on("response", async (response) => {
+      if (response.url().endsWith("/api/room") && response.status() >= 400) {
+        console.error(`room API ${response.status()}: ${await response.text()}`);
+      }
+    });
     page.on("response", (response) => {
       if (!response.url().endsWith("/api/room") || !response.ok()) return;
       void response.json().then((snapshot: Snapshot) => { latest.set(page, snapshot); authUserIds.add(snapshot.me); }).catch(() => {});
@@ -83,20 +88,26 @@ test("two friends complete a full mobile session without horizontal overflow", a
       }
       await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
       expect(latest.get(host)?.session?.history).toHaveLength(6);
-      expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
+      expect(latest.get(host)?.session?.objectiveReveal).toBeUndefined();
       await host.getByRole("button", { name: "Reveal secret objectives" }).click();
       await expect(host.locator(".objective-result")).toHaveCount(2);
+      expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
       await host.getByRole("button", { name: "Reveal party awards" }).click();
     };
     const pagesFor = (playerId: string) => [host, guest].find((page) => latest.get(page)?.me === playerId)!;
     await playSession();
     await expect(host.getByRole("button", { name: "Reveal session records" })).toBeVisible();
     await host.getByRole("button", { name: "Reveal session records" }).click();
+    await host.setViewportSize({ width: 390, height: 844 });
+    await host.getByRole("button", { name: "Give feedback" }).click();
+    await expect(host.getByText("How fun was the session?")).toBeVisible();
     for (const page of [host, guest]) {
-      await page.setViewportSize({ width: 430, height: 932 });
-      const size = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
-      expect(size.width).toBe(430);
-      expect(size.scroll).toBeLessThanOrEqual(size.width);
+      for (const width of [390, 430, 768, 1024, 1440]) {
+        await page.setViewportSize({ width, height: width <= 430 ? 932 : 900 });
+        const size = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+        expect(size.width).toBe(width);
+        expect(size.scroll).toBeLessThanOrEqual(size.width);
+      }
     }
   } finally {
     if (roomCode) {

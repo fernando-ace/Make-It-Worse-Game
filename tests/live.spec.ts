@@ -250,9 +250,10 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
   expect(latest.get(host)?.session?.awards.length).toBeGreaterThan(0);
   await expect(host.locator(".standing-row").first()).toBeVisible();
-  expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
+  expect(latest.get(host)?.session?.objectiveReveal).toBeUndefined();
   await host.getByRole("button", { name: "Reveal secret objectives" }).click();
   await expect(host.locator(".objective-result")).toHaveCount(3);
+  expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
   await host.getByRole("button", { name: "Reveal party awards" }).click();
   await expect(host.locator(".rule-explainer").getByText(/Most Targeted:|Best Read:|Biggest Gambler:|Worst Ally:|Chaos Agent:|Best Ally:/).first()).toBeVisible();
   await host.getByRole("button", { name: "Reveal session records" }).click();
@@ -289,7 +290,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   }
   await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
   expect(latest.get(host)?.session?.history).toHaveLength(6);
-  expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
+  expect(latest.get(host)?.session?.objectiveReveal).toBeUndefined();
   expect(latest.get(host)?.session?.awards.length).toBeGreaterThan(0);
   await host.getByRole("button", { name: "Leave room" }).click();
   await expect(host.getByLabel("Your name")).toHaveValue("Host");

@@ -449,7 +449,11 @@ describe("authoritative party session engine", () => {
     selectRule(room, "double-down");
     const result = snapshot(room, "p1", now + 1).session!;
     expect(result.phase).toBe("final-results");
-    expect(result.objectiveReveal?.p0).toMatchObject({ completed: true, reward: objective.reward });
+    expect(result.objectiveReveal).toBeUndefined();
+    act(room, "p1", "reveal-objectives");
+    expect(snapshot(room, "p0", now + 1).session?.objectiveReveal).toBeUndefined();
+    const revealed = snapshot(room, "p1", now + 1).session!;
+    expect(revealed.objectiveReveal?.p0).toMatchObject({ completed: true, reward: objective.reward });
     expect(room.session?.scores.p0).toBeGreaterThanOrEqual(before + objective.reward);
     expect(() => act(room, "p0", "continue-session", undefined, now, "extra-finalize")).toThrow("intermission");
   });
@@ -461,6 +465,8 @@ describe("authoritative party session engine", () => {
     expect(() => act(room, "p1", "finish-session")).toThrow("Only the host");
     act(room, "p0", "finish-session");
     expect(room.session?.phase).toBe("final-results");
+    expect(snapshot(room, "p1", now).session?.objectiveReveal).toBeUndefined();
+    act(room, "p1", "reveal-objectives");
     expect(snapshot(room, "p1", now).session?.objectiveReveal).toBeTruthy();
   });
   it("starts a different, clean six-game run in the same room", () => {
@@ -469,8 +475,11 @@ describe("authoritative party session engine", () => {
     room.session!.phase = "final-results";
     room.session!.scores.p0 = 7;
     const oldObjective = room.session!.objectives.p0;
+    act(room, "p0", "reveal-objectives");
+    expect(room.session?.objectivesRevealedBy).toEqual(["p0"]);
     act(room, "p0", "restart-session");
     expect(room.session?.phase).toBe("game-intro");
+    expect(room.session?.objectivesRevealedBy).toEqual([]);
     expect(room.session?.gameSlots).toHaveLength(SESSION_GAME_COUNT);
     expect(room.session?.gameSlots).not.toEqual(oldSlots);
     expect(room.session?.scores.p0).toBe(0);
