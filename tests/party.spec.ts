@@ -35,6 +35,8 @@ test("two friends complete a full mobile session without horizontal overflow", a
     await guest.getByRole("button", { name: "Join the party" }).click();
     await expect(guest.getByText("Guest QA", { exact: false })).toBeVisible();
     await expect(host.locator(".player-row")).toHaveCount(2);
+    await host.getByLabel("Chaos intensity").selectOption("high");
+    await expect.poll(() => latest.get(guest)?.chaosIntensity).toBe("high");
     for (const page of [host, guest]) {
       const size = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
       expect(size.scroll).toBeLessThanOrEqual(size.width);
@@ -50,6 +52,10 @@ test("two friends complete a full mobile session without horizontal overflow", a
         const gameId = latest.get(host)!.session!.gameSlots[number - 1];
         await host.getByRole("button", { name: `Start game ${number}` }).click();
         await expect.poll(() => [host, guest].every((page) => latest.get(page)?.session?.phase === "active-game" && latest.get(page)?.session?.round?.number === number)).toBe(true);
+        if (number === 1) {
+          expect(latest.get(host)?.session?.chaosIntensity).toBe("high");
+          expect(latest.get(guest)?.session?.myChaos).toBe(3);
+        }
         expect(latest.get(host)?.session?.round?.minigameId).toBe(gameId);
         await expect(guest.locator(".reveal-list")).toHaveCount(0);
         const firstId = latest.get(host)!.session!.round!.firstCommitPlayerId;
@@ -60,17 +66,21 @@ test("two friends complete a full mobile session without horizontal overflow", a
         }
         await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
         await expect(host.locator(".reveal-row")).toHaveCount(2);
-        const winner = pagesFor(latest.get(host)!.session!.ruleWinnerId!);
-        await winner.getByRole("button", { name: "Choose a House Rule" }).click();
-        await expect(winner.locator(".rule-card").first()).toBeVisible();
-        await winner.locator(".rule-card").first().click();
-        await expect(host.locator(".intermission")).toBeVisible();
+        if (number < 6) {
+          const winner = pagesFor(latest.get(host)!.session!.ruleWinnerId!);
+          await winner.getByRole("button", { name: "Choose a House Rule" }).click();
+          await expect(winner.locator(".rule-card").first()).toBeVisible();
+          await winner.locator(".rule-card").first().click();
+          await expect(host.locator(".intermission")).toBeVisible();
+        } else {
+          await host.getByRole("button", { name: "See final results" }).click();
+          await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
+        }
         for (const page of [host, guest]) {
           const size = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
           expect(size.scroll).toBeLessThanOrEqual(size.width);
         }
       }
-      await host.getByRole("button", { name: "See final results" }).click();
       await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
       expect(latest.get(host)?.session?.history).toHaveLength(6);
       expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
@@ -82,6 +92,12 @@ test("two friends complete a full mobile session without horizontal overflow", a
     await playSession();
     await expect(host.getByRole("button", { name: "Reveal session records" })).toBeVisible();
     await host.getByRole("button", { name: "Reveal session records" }).click();
+    for (const page of [host, guest]) {
+      await page.setViewportSize({ width: 430, height: 932 });
+      const size = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+      expect(size.width).toBe(430);
+      expect(size.scroll).toBeLessThanOrEqual(size.width);
+    }
   } finally {
     if (roomCode) {
       await host.getByRole("button", { name: "Leave room" }).click({ timeout: 3000 }).catch(() => {});

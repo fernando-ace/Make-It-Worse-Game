@@ -12,6 +12,10 @@ function makeRoom(count = 3): Room {
 function act(room: Room, player: string, type: string, value?: string | boolean, time = now, actionId = `test-action-${++actionNumber}`) { apply(room, player, { type, value }, time, actionId); }
 function start(room: Room) { act(room, "p0", "start"); act(room, "p0", "begin-game"); }
 function selectRule(room: Room, id: string) {
+  if (room.session!.gameNumber >= room.session!.gameSlots.length) {
+    act(room, "p0", "finish-session");
+    return;
+  }
   const winner = room.session!.ruleWinnerId!;
   act(room, winner, "open-rule-selection");
   const effects: Record<string, HouseRule["effect"]> = {
@@ -87,6 +91,23 @@ describe("authoritative party session engine", () => {
   it("supports 2 to 8 players and rejects outsiders", () => {
     for (const count of [2, 5, 8]) expect(() => act(makeRoom(count), "p0", "start")).not.toThrow();
     expect(() => act(makeRoom(8), "p9", "sync")).toThrow("Not a room member");
+  });
+  it("keeps the host's Chaos intensity setting server-authoritative and preserves it on replay", () => {
+    const room = makeRoom();
+    expect(snapshot(room, "p1", now).chaosIntensity).toBe("standard");
+    expect(() => act(room, "p1", "set-chaos-intensity", "high")).toThrow("Only the host");
+    expect(() => act(room, "p0", "set-chaos-intensity", "maximum")).toThrow("standard or high");
+    act(room, "p0", "set-chaos-intensity", "high");
+    expect(snapshot(room, "p1", now).chaosIntensity).toBe("high");
+    act(room, "p0", "start");
+    expect(room.session?.chaosIntensity).toBe("high");
+    expect(room.session?.chaos).toEqual({ p0: 3, p1: 3, p2: 3 });
+    expect(snapshot(room, "p1", now).session?.chaosIntensity).toBe("high");
+    expect(() => act(room, "p0", "set-chaos-intensity", "standard")).toThrow("locked");
+    room.session!.phase = "final-results";
+    act(room, "p0", "restart-session");
+    expect(room.session?.chaosIntensity).toBe("high");
+    expect(room.session?.chaos).toEqual({ p0: 3, p1: 3, p2: 3 });
   });
   it("keeps each game's submitted action private and restores only the reconnecting player's choice", () => {
     for (const gameId of Object.keys(MINIGAMES)) {
@@ -314,7 +335,6 @@ describe("authoritative party session engine", () => {
     expect(room.session?.history.map((item) => item.minigameId)).toEqual(room.session?.gameSlots);
     expect(room.session?.history[1].rules).toHaveLength(1);
     expect(Object.values(room.session!.round!.result!.modifiers).flat().some((modifier) => modifier.startsWith("Double Down ×4:"))).toBe(true);
-    act(room, "p0", "continue-session");
     expect(room.session?.phase).toBe("final-results");
     expect(room.session?.awards.some((award) => award.id === "best-read")).toBe(true);
     const recordedBetrayals = room.session!.history.flatMap((game) => game.result.events).some((event) => event.type === "betrayal" || event.type === "betrayed");
@@ -427,12 +447,21 @@ describe("authoritative party session engine", () => {
     const before = room.session!.scores.p0;
     submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" });
     selectRule(room, "double-down");
-    act(room, "p0", "continue-session");
     const result = snapshot(room, "p1", now + 1).session!;
     expect(result.phase).toBe("final-results");
     expect(result.objectiveReveal?.p0).toMatchObject({ completed: true, reward: objective.reward });
     expect(room.session?.scores.p0).toBeGreaterThanOrEqual(before + objective.reward);
     expect(() => act(room, "p0", "continue-session", undefined, now, "extra-finalize")).toThrow("intermission");
+  });
+  it("skips an ineffective final House Rule and reveals the recap after the finale", () => {
+    const room = makeRoom(); setGame(room, "split-decision", SESSION_GAME_COUNT);
+    submissions(room, { p0: "RED", p1: "BLUE", p2: "BLUE" });
+    expect(room.session?.phase).toBe("game-results");
+    expect(() => act(room, room.session!.ruleWinnerId!, "open-rule-selection")).toThrow("no future game");
+    expect(() => act(room, "p1", "finish-session")).toThrow("Only the host");
+    act(room, "p0", "finish-session");
+    expect(room.session?.phase).toBe("final-results");
+    expect(snapshot(room, "p1", now).session?.objectiveReveal).toBeTruthy();
   });
   it("starts a different, clean six-game run in the same room", () => {
     const room = makeRoom(); setGame(room, "split-decision");

@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
           players: [
             { id: uid, name, seenAt: now },
           ],
+          chaosIntensity: "standard",
           session: null,
           processed: [],
         };

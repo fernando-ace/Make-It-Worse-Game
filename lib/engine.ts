@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { Action, HouseRule, MinigameResolution, PartyRound, PartySession, Player, Room, Snapshot } from "./types";
+import type { Action, ChaosIntensity, HouseRule, MinigameResolution, PartyRound, PartySession, Player, Room, Snapshot } from "./types";
 import { MINIGAMES, resolveAwards, registerMinigame } from "./games";
 import { assignObjectives, advanceObjectives } from "./objectives";
 import { POWERS, powerOffersFor } from "./powers";
@@ -39,7 +39,7 @@ function createRound(number: number, minigameId: string, config: PartyRound["con
   const firstCommitPlayerId = preferredId && players.some((player) => player.id === preferredId) ? preferredId : null;
   return { number, minigameId, startedAt: now, deadlineAt: now + ROUND_SECONDS * 1000, config: structuredClone(config), submissions: {}, firstCommitPlayerId, result: null };
 }
-function createSession(room: Room, seed = randomBytes(16).toString("hex"), avoidSlots?: string[]): PartySession {
+function createSession(room: Room, seed = randomBytes(16).toString("hex"), avoidSlots?: string[], chaosIntensity: ChaosIntensity = "standard"): PartySession {
   let attempt = 0;
   let selectedSeed = seed;
   let gameSlots = selectSessionGames(selectedSeed);
@@ -49,9 +49,9 @@ function createSession(room: Room, seed = randomBytes(16).toString("hex"), avoid
   }
   const firstGame = MINIGAMES[gameSlots[0]];
   return {
-    phase: "game-intro", gameNumber: 1, gameSlots, seed: selectedSeed,
+    phase: "game-intro", gameNumber: 1, gameSlots, seed: selectedSeed, chaosIntensity,
     objectives: assignObjectives(selectedSeed, room.players, gameSlots),
-    chaos: Object.fromEntries(room.players.map((player) => [player.id, 2])), activePowers: [], scoreProgression: [Object.fromEntries(room.players.map((player) => [player.id, 0]))],
+    chaos: Object.fromEntries(room.players.map((player) => [player.id, chaosIntensity === "high" ? 3 : 2])), activePowers: [], scoreProgression: [Object.fromEntries(room.players.map((player) => [player.id, 0]))],
     gameConfig: firstGame.config({ players: room.players, gameNumber: 1 }),
     scores: Object.fromEntries(room.players.map((player) => [player.id, 0])), round: null,
     activeRules: [], offeredRules: [], newlyActivatedRule: null, ruleWinnerId: null, history: [], awards: [],
@@ -259,6 +259,16 @@ function resolveRound(room: Room, now: number) {
   chooseOffers(session, room.players);
 }
 
+function finishSession(room: Room, session: PartySession) {
+  for (const player of room.players) {
+    const objective = session.objectives[player.id];
+    if (objective?.completed) session.scores[player.id] = (session.scores[player.id] ?? 0) + objective.reward;
+  }
+  session.scoreProgression[session.scoreProgression.length - 1] = structuredClone(session.scores);
+  session.awards = resolveAwards(session.history, room.players);
+  session.phase = "final-results";
+}
+
 export function join(room: Room, uid: string, name: string, now: number) {
   if (room.blockedPlayers?.includes(uid)) throw new Error("The host removed you from this room");
   const existing = room.players.find((player) => player.id === uid);
@@ -277,25 +287,26 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
   const session = room.session;
   switch (action.type) {
     case "sync": break;
+    case "set-chaos-intensity": {
+      if (uid !== room.hostId) throw new Error("Only the host can change party settings");
+      if (room.session) throw new Error("Party settings are locked after the game starts");
+      if (action.value !== "standard" && action.value !== "high") throw new Error("Choose standard or high Chaos intensity");
+      room.chaosIntensity = action.value;
+      break;
+    }
     case "start": {
       if (uid !== room.hostId) throw new Error("Only the host can start the party");
       if (room.session) throw new Error("This party has already started");
       if (room.players.length < 2) throw new Error("At least two players are required to start");
       if (room.players.some((p) => now - p.seenAt > 15000)) throw new Error("All players must be connected before starting");
-      room.session = createSession(room);
+      room.session = createSession(room, undefined, undefined, room.chaosIntensity ?? "standard");
       break;
     }
     case "continue-session": {
       if (uid !== room.hostId) throw new Error("Only the host can continue the party");
       if (!session || session.phase !== "intermission") throw new Error("The party is not at an intermission");
       if (session.gameNumber >= session.gameSlots.length) {
-        for (const player of room.players) {
-          const objective = session.objectives[player.id];
-          if (objective?.completed) session.scores[player.id] = (session.scores[player.id] ?? 0) + objective.reward;
-        }
-        session.scoreProgression[session.scoreProgression.length - 1] = structuredClone(session.scores);
-        session.awards = resolveAwards(session.history, room.players);
-        session.phase = "final-results";
+        finishSession(room, session);
         break;
       }
       session.gameNumber++;
@@ -308,7 +319,7 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
     case "restart-session": {
       if (uid !== room.hostId) throw new Error("Only the host can start a new session");
       if (!session || session.phase !== "final-results") throw new Error("Finish the current session before starting another");
-      room.session = createSession(room, randomBytes(16).toString("hex"), session.gameSlots);
+      room.session = createSession(room, randomBytes(16).toString("hex"), session.gameSlots, session.chaosIntensity);
       break;
     }
     case "begin-game": {
@@ -366,7 +377,14 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
     }
     case "open-rule-selection": {
       if (!session || session.phase !== "game-results" || uid !== session.ruleWinnerId) throw new Error("Only this game's winner can choose the House Rule");
+      if (session.gameNumber >= session.gameSlots.length) throw new Error("The finale has no future game for another House Rule");
       session.phase = "house-rule-selection";
+      break;
+    }
+    case "finish-session": {
+      if (!session || session.phase !== "game-results" || session.gameNumber !== session.gameSlots.length) throw new Error("Finish the final game before ending the session");
+      if (uid !== room.hostId) throw new Error("Only the host can finish the session");
+      finishSession(room, session);
       break;
     }
     default: throw new Error("Unknown action");
@@ -380,7 +398,7 @@ export function snapshot(room: Room, uid: string, now: number): Snapshot {
   resolveRound(room, now);
   const session = room.session;
   return {
-    id: room.id, code: room.code, hostId: room.hostId, revision: room.revision, players: room.players.map((player) => ({ ...player })), me: uid, serverNow: now,
+    id: room.id, code: room.code, hostId: room.hostId, revision: room.revision, players: room.players.map((player) => ({ ...player })), me: uid, serverNow: now, chaosIntensity: room.chaosIntensity ?? "standard",
     session: session ? (() => {
       const publicSession = structuredClone(session);
       const myObjective = structuredClone(publicSession.objectives[uid]);

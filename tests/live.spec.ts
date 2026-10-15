@@ -120,6 +120,11 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     await expect(host.locator(".reveal-groups")).toBeVisible({ timeout: 60000 });
     await expect(host.locator(".reveal-row")).toHaveCount(3);
     await expect.poll(() => latest.get(host)?.session?.phase, { timeout: 60000 }).toBe("game-results");
+    if (latest.get(host)!.session!.gameNumber === latest.get(host)!.session!.gameSlots.length) {
+      await host.getByRole("button", { name: "See final results" }).click();
+      await expect.poll(() => latest.get(host)?.session?.phase, { timeout: 60000 }).toBe("final-results");
+      return;
+    }
     const winnerId = latest.get(host)!.session!.ruleWinnerId!;
     const winnerPage = pages.find((page) => latest.get(page)?.me === winnerId)!;
     await expect(winnerPage.getByRole("button", { name: "Choose a House Rule" })).toBeVisible({ timeout: 60000 });
@@ -242,7 +247,6 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     if (gameId === "group-project") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "contribution")).toBe(true);
     if (gameId === "golden-ticket") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "support")).toBe(true);
   }
-  await host.getByRole("button", { name: "See final results" }).click();
   await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
   expect(latest.get(host)?.session?.awards.length).toBeGreaterThan(0);
   await expect(host.locator(".standing-row").first()).toBeVisible();
@@ -283,7 +287,6 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
     await finishRound("");
   }
-  await host.getByRole("button", { name: "See final results" }).click();
   await expect(host.getByText("SESSION COMPLETE · 6 GAMES")).toBeVisible();
   expect(latest.get(host)?.session?.history).toHaveLength(6);
   expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();

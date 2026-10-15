@@ -64,14 +64,11 @@ function runSeededSession(seed: string, playerCount: number) {
       const selected = seededShuffle(session.offeredRules, `${seed}:rule:${gameNumber}`)[0];
       act(session.ruleWinnerId!, "select-rule", selected.id);
     } else {
-      act(session.ruleWinnerId!, "open-rule-selection");
-      expect(session.offeredRules.length).toBeGreaterThan(0);
-      const selected = seededShuffle(session.offeredRules, `${seed}:rule:${gameNumber}`)[0];
-      act(session.ruleWinnerId!, "select-rule", selected.id);
+      expect(() => act(session.ruleWinnerId!, "open-rule-selection")).toThrow("no future game");
+      act("p0", "finish-session");
     }
   }
 
-  act("p0", "continue-session");
   expect(session.phase).toBe("final-results");
   expect(session.history).toHaveLength(SESSION_GAME_COUNT);
   expect(session.scoreProgression).toHaveLength(SESSION_GAME_COUNT + 1);

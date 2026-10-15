@@ -5,9 +5,9 @@ Make It Worse is a browser party game for 2–8 friends. Players join with a roo
 ## A session
 
 1. A host creates a room and shares the invite link or six-character code. Friends join without creating an account; Supabase anonymous auth preserves identity on reconnect.
-2. The host starts when everyone is ready. A deterministic Session Director builds a six-game arc from the server's session seed. It balances intensity, mechanic families, social information, player count, and finale suitability. A fresh replay seed avoids repeating the previous lineup.
+2. The host keeps the Standard Chaos setting or chooses High to give everyone 3 starting Chaos instead of 2. The setting is validated and stored server-side, then preserved on replay. When everyone is ready, a deterministic Session Director builds a six-game arc from the server's session seed. It balances intensity, mechanic families, social information, player count, and finale suitability. A fresh replay seed avoids repeating the previous lineup.
 3. Players read a short contextual instruction, choose privately, and reveal together when everyone locks in or the round timer expires.
-4. Recorded events update scores, private objectives, Chaos, and session callbacks. The round winner chooses one of up to four server-selected House Rules compatible with upcoming games.
+4. Recorded events update scores, private objectives, Chaos, and session callbacks. The round winner chooses one of up to four server-selected House Rules compatible with upcoming games; the finale skips a rule that would never take effect.
 5. Chaos is earned through play and spent on rotating, privately offered powers. Each player can use one power per game; choices and outcomes remain server-authoritative.
 6. The final game uses standings and earned progress for a bounded lead/comeback bonus. Results reveal objectives, event-backed awards, session moments, and score progression in stages. The host can replay in the same room with player identities preserved.
 

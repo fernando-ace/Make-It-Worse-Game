@@ -13,6 +13,8 @@ The same engine suite validates role-filtered snapshots, each registered game's 
 - One fixed pool of House Rules could be both repetitive and irrelevant to upcoming games. Offers are capped at four and family-filtered; selected effects are applied by the common scorer and shown in result modifiers.
 - Identical, always-available powers offered little session strategy. Players now receive deterministic rotating private offers, with server-enforced affordability and one use per game.
 - Objective assignment could produce duplicate or unsupported goals. Assignment now filters against the lineup and available power offers, prefers unique goals, and tracks event progress privately.
+- Hosts can choose a Standard or High Chaos start before the session. The server validates and stores the setting, resets starting Chaos correctly on replay, and defaults to Standard without slowing room creation.
+- The finale now goes directly from its revealed game result to the staged session recap. The server rejects post-finale House Rule selection, so the winner never chooses a rule with no future round to affect.
 
 ## Limits
 
@@ -20,4 +22,4 @@ Across the 1,000 full-session run, the test observed 985 unique lineups; all 16 
 
 ## Browser verification
 
-On 2026-10-14, the two-player 390px browser test completed one six-game session in 57.8 seconds. The configured Supabase test completed two consecutive six-game sessions with three players in 2.8 minutes, including reconnect, private information, rotating powers, objective reveal, awards, score progression, and replay reset checks. The final source validation passed: 90 Vitest tests including the full-session simulation, ESLint, TypeScript, and the production build. These results are local to this run and do not claim deployed or physical-device evidence.
+On 2026-10-14, the two-player browser test completed one six-game session in 1.8 minutes at 390px with High Chaos, then checked the final results layout at 430px; neither viewport had horizontal overflow. The configured Supabase test completed two consecutive six-game sessions with three players in 5.3 minutes, including reconnect, private information, rotating powers, objective reveal, awards, score progression, replay reset, and the direct finale-to-recap flow. Final validation passed: 92 Vitest tests including the full-session simulation, ESLint, TypeScript, and the production build. These results are local to this run and do not claim deployed or physical-device evidence.

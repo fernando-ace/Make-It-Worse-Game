@@ -1,6 +1,7 @@
 export type Player = { id: string; name: string; seenAt: number };
 
 export type GamePhase = "game-intro" | "active-game" | "game-results" | "house-rule-selection" | "intermission" | "final-results";
+export type ChaosIntensity = "standard" | "high";
 
 export type HouseRuleEffect =
   | { type: "score-multiplier"; multiplier: number }
@@ -72,6 +73,7 @@ export type PartySession = {
   phase: GamePhase;
   gameNumber: number;
   gameSlots: string[];
+  chaosIntensity: ChaosIntensity;
   gameConfig: MinigameConfig;
   scores: Record<string, number>;
   seed: string;
@@ -102,10 +104,10 @@ export type MinigameDefinition = {
   validate: (choice: string, input: { players: Player[]; playerId: string; config: MinigameConfig }) => boolean;
   resolve: (input: { players: Player[]; submissions: Record<string, string>; scores: Record<string, number>; config: MinigameConfig }) => Omit<MinigameResolution, "points" | "modifiers" | "optionCounts">;
 };
-export type Room = { id: string; code: string; hostId: string; revision: number; createdAt: number; players: Player[]; blockedPlayers?: string[]; session: PartySession | null; processed: string[] };
+export type Room = { id: string; code: string; hostId: string; revision: number; createdAt: number; players: Player[]; blockedPlayers?: string[]; chaosIntensity?: ChaosIntensity; session: PartySession | null; processed: string[] };
 export type Action = { type: string; value?: string | number | boolean };
 export type Snapshot = {
-  id: string; code: string; hostId: string; revision: number; players: Player[]; me: string; serverNow: number;
+  id: string; code: string; hostId: string; revision: number; players: Player[]; me: string; serverNow: number; chaosIntensity: ChaosIntensity;
   session: (Omit<PartySession, "round" | "seed" | "objectives" | "chaos" | "activePowers"> & {
     round: (Omit<PartyRound, "submissions"> & { answeredCount: number; myChoice: string | null; submittedIds: string[] }) | null;
     myObjective: ObjectiveState; myChaos: number; myPowers: ActivePower[]; myPowerOffers: PowerId[]; myIntel: { playerId: string; playerName: string; choice: string } | null; objectiveReveal?: Record<string, ObjectiveState>;
