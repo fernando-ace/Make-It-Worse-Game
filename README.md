@@ -86,12 +86,11 @@ The feedback query above is for authorized project operators; do not export or s
 
 ## Running locally
 
-Requires Node.js 22 or newer, npm, and a Supabase project.
+Requires Node.js 22 or newer and npm. Install local dependencies with `npm ci`; the local validation checks below do not require a Supabase project. Running the multiplayer app requires a dedicated non-production Supabase project configured as described below.
 
 ```sh
 npm ci
 cp .env.example .env.local
-npm run dev
 ```
 
 Set these values in `.env.local` and in the hosting environment:
@@ -105,7 +104,13 @@ Set these values in `.env.local` and in the hosting environment:
 
 Never commit `.env.local` or expose the server key or cron secret through a `NEXT_PUBLIC_` variable. Enable Anonymous Sign-ins, apply the migrations in `supabase/migrations/`, and confirm `cr_rooms` is in the `supabase_realtime` publication. For an existing linked project, inspect its migration history before changing it.
 
+After configuring the dedicated development project, run `npm run dev` and open `http://localhost:3000`. The script runs `next dev --hostname 0.0.0.0`. To serve a local production build, run `npm run build` followed by `npm start` (`next start --hostname 0.0.0.0`).
+
 ## Validation
+
+### Local checks (no Supabase or browser required)
+
+After `npm ci`, run the configured checks from the repository root:
 
 ```sh
 npm run lint
@@ -113,14 +118,38 @@ npm run typecheck
 npm test
 npm run test:simulation
 npm run build
-# Requires configured real Supabase credentials and anonymous sign-in:
+```
+
+| Command | Configured script | Coverage |
+| --- | --- | --- |
+| `npm run lint` | `eslint .` | Repository lint checks |
+| `npm run typecheck` | `tsc --noEmit` | TypeScript checks |
+| `npm test` | `vitest run` | All `tests/**/*.test.ts` tests, including the simulation suite |
+| `npm run test:simulation` | `vitest run tests/session-simulation.test.ts` | Focused deterministic simulation run |
+| `npm run build` | `next build` | Production build |
+
+These checks use local dependencies and do not need Supabase credentials, a running Supabase service, or Playwright browsers. Vitest covers game input/resolution, privacy, deterministic scoring, 1,001 Session Director lineups, objectives, powers, replay, and API behavior with mocked services. The simulation runs 1,000 complete seeded sessions across 2–8 players; running it separately repeats the simulation coverage included in `npm test`.
+
+See [docs/session-simulation.md](docs/session-simulation.md) for the deterministic simulation coverage and findings.
+
+### Service-dependent browser checks
+
+Use a dedicated non-production Supabase project with Anonymous Sign-ins enabled, the reviewed migrations applied, and `cr_rooms` in the `supabase_realtime` publication, as described above. Configure its URL, publishable key, and server-only key in `.env.local` (both browser suites load this file) or the test process environment. Never point these checks at production: they create test rooms and anonymous users and attempt to delete them afterward; live tests can also leave beta telemetry.
+
+Install Playwright's Chromium browser and the operating-system dependencies it requires before running:
+
+```sh
+npx playwright install --with-deps chromium
 npm run test:live
 npm run test:party
 ```
 
-Vitest covers game input/resolution, privacy, deterministic scoring, 1,001 Session Director lineups, objectives, powers, replay, and API behavior. `test:simulation` runs 1,000 complete seeded sessions across 2–8 players. `test:live` completes two consecutive six-game, three-player sessions against the configured Supabase project, including reconnect, private state, powers, awards, and same-room replay. `test:party` completes a six-game, two-player session at 390px and checks horizontal overflow after every round. These live checks create temporary test rooms/users and clean them up.
+- `test:live` runs `playwright test tests/live.spec.ts`: two consecutive six-game, three-player sessions, including reconnect, private state, powers, awards, and same-room replay.
+- `test:party` runs `playwright test tests/party.spec.ts`: a six-game, two-player session at 390px, checking horizontal overflow after every round.
 
-See [docs/session-simulation.md](docs/session-simulation.md) for the deterministic simulation coverage and findings.
+By default, Playwright starts `npm run dev` at `http://localhost:3000` or reuses a server already running there. Ensure any reused server uses the same dedicated test project. To test an existing non-production app server, set `PLAYWRIGHT_BASE_URL`; this disables automatic server startup. That server and the test process must use the same dedicated Supabase project.
+
+Report these browser checks separately from local validation. A skipped test (including `test:live` when credentials are missing) is not evidence that live multiplayer passed.
 
 ## Production release and field testing
 
