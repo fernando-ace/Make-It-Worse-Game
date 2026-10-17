@@ -75,7 +75,10 @@ test("selected Party Night two-beat game survives refresh and resolves through t
     expect(latest.get(guest)?.session?.round?.beat?.myFirstChoice).toBe(guestFirstChoice);
     expect(latest.get(guest)?.session?.round?.myChoice).toBe(guestSecondChoice);
     await Promise.all([host, guest].map(async page => expect((await size(page)).scroll).toBeLessThanOrEqual((await size(page)).width)));
-    await Promise.all([host, guest].map(page => page.locator(".choice-button:not(:disabled)").first().click()));
+    if (latest.get(host)?.session?.phase === "active-game" && !latest.get(host)?.session?.round?.myChoice) {
+      await host.locator(".choice-button:not(:disabled)").first().click();
+      await expect.poll(() => latest.get(host)?.session?.round?.myChoice).toBeTruthy();
+    }
     await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
     await expect(host.locator(".reveal-row")).toHaveCount(2);
     expect(latest.get(host)?.session?.history).toHaveLength(1);

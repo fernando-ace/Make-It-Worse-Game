@@ -249,9 +249,20 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
         await choose(page, labelFor(gameId, playerName, options));
       }
     }
+    // A two-beat game's public reveal is also rendered during beat 2. The
+    // first-beat transition may happen while the final page's action is still
+    // syncing, so make any uncommitted second-beat choice explicit here.
+    if (latest.get(host)?.session?.round?.beat?.index === 1) {
+      for (const page of pages) {
+        if (latest.get(page)?.session?.phase !== "active-game" || latest.get(page)?.session?.round?.myChoice) continue;
+        const available = page.locator(".choice-button:not(:disabled)").first();
+        if (await available.count()) await available.click();
+        await expect.poll(() => latest.get(page)?.session?.round?.myChoice || latest.get(page)?.session?.phase === "game-results", { timeout: 60000 }).toBe(true);
+      }
+    }
     await expect(host.locator(".reveal-groups")).toBeVisible({ timeout: 60000 });
     await expect(host.locator(".reveal-row")).toHaveCount(3);
-    await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
+    await expect.poll(() => latest.get(host)?.session?.phase, { timeout: 60000 }).toBe("game-results");
     await finishRound(ruleByRound[number - 1]);
     if (gameId === "make-it-worse") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "read")).toBe(true);
     if (gameId === "trust-me") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayal")).toBe(true);
