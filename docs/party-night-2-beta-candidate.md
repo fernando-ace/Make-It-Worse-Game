@@ -5,16 +5,18 @@
 - Requested base branch: `feat/party-night-2`
 - Party Night 2.0 commits verified: `cd1112abc70d443cbbe50daeabc1563edae060d9` (gameplay), `ca263a371479d598fea8aec1f15135f3adfe6189` (documentation)
 - Candidate branch: `feat/party-night-2-beta-candidate`
-- Last hosted validation code commit: `92f7d3c9af4d77124f35875dd79bb891f77f490a`
+- Last hosted validation code commit: `12b46ae6f831c0092d93d413dab3aaf7d4acd2b2`
 - Master base at audit: `6d8fec7434255420aba6501becec3c05afe94b33`
 
-Candidate commits after `ca263a3`: `407488f`, `31f4897`, `f183921`, `9c3449f`, `7a28c78`, `a995ef8`, `b130949`, `633fd75`, `92f7d3c`, and the report-only update `bb9859d`. The branch is pushed and is not merged. Hosted validation passed on `92f7d3c`; `bb9859d` only records those results.
+Candidate commits after `ca263a3`: `407488f`, `31f4897`, `f183921`, `9c3449f`, `7a28c78`, `a995ef8`, `b130949`, `633fd75`, `92f7d3c`, report updates `bb9859d` and `7bd6bfc`, and browser synchronization fix `12b46ae`. The branch is pushed and is not merged. Hosted validation passed on `12b46ae`; the following report update records those results.
 
 ## Party Night implementation audit
 
 The gameplay diff and the engine/API path were reviewed, including the beat model, action beat checks, transition deadlines, reveal filtering, private hints, power timing, House Rule compatibility, scoring, objectives, Chaos, finale, Director, telemetry, tests, and documentation. No high-confidence gameplay defect requiring a scoring/state-machine change was found in this audit. Existing engine tests include refresh snapshots, duplicate action IDs, stale beat rejection, deadlines, and private information checks for each new game.
 
 No additional gameplay rewrite is justified from this pass. The focused browser suite covers one real two-player server/API flow per selected two-beat game, privacy snapshots, a refresh after the beat transition and after a beat-two commitment, resolution, and 390/430 px overflow. The live browser suite covers a three-player six-game session and same-room replay. Broader phase-by-phase reconnect and deadline race coverage is not complete; see limitations.
+
+The defects found in this pass were browser-test assumptions: random sessions could select a new game unknown to the choice mapper; reveal UI can appear during beat 2 before the session resolves; and the replay/mobile helpers could skip or repeat beat-two submissions while snapshots were syncing. Those test issues are fixed and the hosted suites pass. No high-confidence gameplay or API state-machine defect was found.
 
 ## Validation architecture
 
@@ -28,7 +30,7 @@ No additional gameplay rewrite is justified from this pass. The focused browser 
 - `npm test`: 128 tests passed.
 - `npm run test:simulation`: 1,000 deterministic sessions passed.
 - Production build: `npm run build` passed locally with Next.js 16.3.8. It also passed in clean GitHub-hosted CI on the candidate head; compilation, TypeScript, page data, and static generation completed.
-- Hosted CI run `38999928780` on `92f7d3c`: all jobs passed. The `validate` job ran `npm ci`, lint, typecheck, all Vitest tests, the 1,000-session simulation, and `npm run build`.
+- Hosted CI run `39000650928` on `12b46ae`: all jobs passed. The `validate` job ran `npm ci`, lint, typecheck, all Vitest tests, the 1,000-session simulation, and `npm run build`.
 - Browser jobs passed against ephemeral local Supabase with repository migrations and installed Chromium: the existing three-player live suite (including scoring, House Rules, powers, objectives, finale, and replay), the existing two-player mobile party suite, and the deterministic E2E suite for Cross My Heart, Signal / Noise, Last Seats, and Breaking Point.
 - The local executor could not pull Supabase/Chromium images (HTTP 403); the hosted run supplied the full-stack browser evidence instead. No production Supabase configuration or credentials were used.
 
