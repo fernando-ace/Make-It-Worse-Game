@@ -88,6 +88,7 @@ Final local code checks: `npm ci`, `npm run lint`, `npm run typecheck`, `npm tes
 ## Known limitations and human checks
 
 - In this workspace, Playwright Chromium download was rejected with HTTP 403 from `cdn.playwright.dev`; the Supabase CLI could not pull ephemeral service images because `public.ecr.aws` returned HTTP 403. Therefore no browser suite is claimed as passed locally. Hosted CI is the intended reproducible environment; its result must be checked before calling the candidate a validated release.
+- The branch push succeeded, but hosted workflow status could not be read: GitHub API requests returned HTTP 403 because this execution environment has no valid GitHub API credential. The branch is pushed; browser CI evidence remains pending and must be confirmed before field testing.
 - A physical-device pass remains open for iOS Safari and Android Chrome at 390/430 px, short landscape, safe areas, long text, keyboard and touch interaction, and VoiceOver/TalkBack.
 - Human field testing remains open. Run a minimum of three real sessions across 2, 3–4, and 5–6 players; include a 7–8 person session if practical, record device mix and new/returning counts, and complete one results template per session. Do not author gameplay changes from synthetic metrics alone.
 - The tests do not claim full coverage of every malformed direct API target manipulation or a full-stack exact-boundary deadline collision. Keep the privacy/API checks and revision conflict behavior as release gates.
