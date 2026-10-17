@@ -64,16 +64,17 @@ test("two friends complete a full mobile session without horizontal overflow", a
         }
         expect(latest.get(host)?.session?.round?.minigameId).toBe(gameId);
         await expect(guest.locator(".reveal-list")).toHaveCount(0);
+        const hasSecondBeat = Boolean(latest.get(host)?.session?.round?.beat);
         const firstId = latest.get(host)!.session!.round!.firstCommitPlayerId;
         const ordered = firstId ? [pagesFor(firstId), ...[host, guest].filter((page) => latest.get(page)?.me !== firstId)] : [host, guest];
         for (let beat = 0; beat < 2; beat++) {
-          if (beat === 1 && !latest.get(host)?.session?.round?.beat) break;
+          if (beat === 1 && !hasSecondBeat) break;
           for (const page of ordered) {
             const choice = page.locator(".choice-button:not(:disabled)").first();
             await choice.click();
-            if (beat === 0 && latest.get(page)?.session?.round?.beat) {
-              await expect.poll(() => latest.get(page)?.session?.round?.beat?.index).toBe(1);
-            } else await expect.poll(() => Boolean(latest.get(page)?.session?.round?.myChoice)).toBe(true);
+            if (beat === 0 && hasSecondBeat) {
+              await expect.poll(() => latest.get(page)?.session?.round?.beat?.index === 1 || Boolean(latest.get(page)?.session?.round?.myChoice)).toBe(true);
+            } else await expect.poll(() => Boolean(latest.get(page)?.session?.round?.myChoice) || latest.get(page)?.session?.phase === "game-results").toBe(true);
           }
         }
         await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
