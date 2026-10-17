@@ -6,14 +6,14 @@ Make It Worse is a browser party game for 2–8 friends. Players join with a roo
 
 1. A host creates a room and shares the invite link or six-character code. Friends join without creating an account; Supabase anonymous auth preserves identity on reconnect.
 2. The host keeps the Standard Chaos setting or chooses High to give everyone 3 starting Chaos instead of 2. The setting is validated and stored server-side, then preserved on replay. When everyone is ready, a deterministic Session Director builds a six-game arc from the server's session seed. It balances intensity, mechanic families, social information, player count, and finale suitability. A fresh replay seed avoids repeating the previous lineup.
-3. Players read a short contextual instruction, choose privately, and reveal together when everyone locks in or the round timer expires.
+3. Players read short contextual instructions and choose privately. Most games reveal together; four games have two timed decisions, with an explicit partial reveal and a response round that survives reconnects.
 4. Recorded events update scores, private objectives, Chaos, and session callbacks. The round winner chooses one of up to four server-selected House Rules compatible with upcoming games; the finale skips a rule that would never take effect.
-5. Chaos is earned through play and spent on rotating, privately offered powers. Each player can use one power per game; choices and outcomes remain server-authoritative.
+5. Chaos is earned through play and spent on rotating, privately offered powers. Each player can use one power per game; saved Chaos has a capped finale payout. Choices and outcomes remain server-authoritative.
 6. The final game uses standings and earned progress for a bounded lead/comeback bonus. Results reveal objectives, event-backed awards, session moments, and score progression in stages. The host can replay in the same room with player identities preserved.
 
 ## Game registry
 
-Sixteen games cover prediction, social targeting, alliances, risk, bluffing, passing danger, protection, shared effort, and group incentives. New games live in `lib/games/` and register through `lib/games/index.ts` or `lib/games/party.ts`.
+Twenty games cover prediction, social targeting, alliances, risk, bluffing, passing danger, protection, shared effort, public promises, asymmetric reports, resource allocation, and sequential pressure. New games live in `lib/games/` and register through `lib/games/index.ts` or `lib/games/party.ts`.
 
 Each `MinigameDefinition` supplies an id, short instructions, options/configuration, input validation, deterministic resolution, and structured events. Add `GameDirectorMetadata` for mechanic family, social intensity, information visibility, betrayal potential, coordination, randomness, player range, expected duration, session suitability, House Rule tags, and finale suitability. Emit structured events for any interaction that should affect scoring, objectives, or the recap. Do not derive authoritative state in the UI.
 
@@ -156,3 +156,23 @@ Report these browser checks separately from local validation. A skipped test (in
 The production Vercel project is connected to the `master` branch. Before release, inspect the exact commit and migration history, run the validation suite above, apply only reviewed pending migrations, and push the reviewed commit to `master`. Verify the resulting Vercel production deployment, smoke test the public URL and multiplayer flows, and inspect Vercel function logs. If a release is broken, roll back to the last known-good production deployment and then fix forward. Keep preview deployments protected; production must remain publicly reachable.
 
 Use [docs/public-beta-field-test.md](docs/public-beta-field-test.md) for a short group play test, device checklist, questions, and issue severity guide.
+
+## Party Night 2.0 architecture
+
+A minigame is a typed `MinigameDefinition` in `lib/games/`. Single-beat games continue to use `config`, `validate`, and pure `resolve`. A multi-beat definition additionally supplies `multiBeat.seconds`, `advance`, and `resolve`: the engine saves beat-one choices privately, calls `advance` to publish only its explicit board and owner-only hints, clears the active submission map, and validates beat-two actions against the current beat. The engine owns deadlines, revisions, reconnect snapshots, scoring modifiers, objectives, events, and final resolution. Never put secret information in `publicLines` or client supplied state.
+
+The Session Director uses stable interaction families, player range, social intensity, finale suitability, estimated duration, and seeded arc tags. It rejects adjacent and excessive family repeats, includes two or three two-beat games when available, and keeps estimated decision time bounded. Add a new game by providing explicit metadata and deterministic legal choices for 2–8 players, writing resolution and privacy tests, and then running 1,000 seeded sessions. Declare House Rule compatibility narrowly so choices change an upcoming game meaningfully.
+
+House Rules are typed effects and apply in the server scoring pipeline. Each offer must match a future mechanic family. `binding-promises` changes the payoff for an explicit promise event; `breathing-room` adds 15 seconds per decision to compatible two-beat rounds. Keep descriptions aligned with resolution and put applied modifiers in each player's score reason. Secret objectives are selected from games present in the seeded lineup; their text and friend target stay in private session state and appear only in the owner's snapshot until final opt-in reveal. Do not log objective IDs with text or names.
+
+Chaos starts at two (or three in high intensity), is earned from submitted rounds, caps at eight, and buys one rotating power per game. Turn It Up costs one for a conditional point; other powers retain their listed costs. At the finale, three unspent Chaos earns one point, capped at two. The award and objective reward are server-side. Keep power offers and targets role-filtered and make stale-beat power actions fail.
+
+`lib/party-metrics.ts` emits only explicit numeric operational aggregates after committed engine changes. Its allowlist contains a pseudonymous session hash, player count, game ID/number, durations, counts, and score spread. Never pass rooms, player names, submissions, hints, objective content, power offers, or event payloads to it. The current sink is structured server logging; sample at the collector before using for product conclusions. No database migration is needed.
+
+## Field test protocol
+
+Run complete sessions with 2 players, 3–4, 5–6, and 7–8. Include at least one session with two or more multi-beat games, a selected rule, a power, an objective reveal, and a same-room replay. At 390px and 430px, note overflow and whether players can answer at a glance: “What am I deciding? What happens? Am I locked? Who am I waiting for?”
+
+For each group, record laughter, negotiation, accusations, promises kept or broken, targeting, dead time, confusing scoring, the reveal people retold, favorite and least favorite game, and whether they asked to run it back. Ask only: What felt unclear? Which decision caused the most discussion? Did any rule change your move? Did you save Chaos for a reason? Which moment do you remember? Would you replay now?
+
+Keep the report in three sections: AUTOMATED EVIDENCE (tests, duration, reconnect and score traces), HUMAN OBSERVATION (direct quotes and observed pauses/reactions), and PRODUCT HYPOTHESIS (one change to try next). Automated simulation is not evidence of laughter or negotiation; recruit and observe real groups before claiming those outcomes.
