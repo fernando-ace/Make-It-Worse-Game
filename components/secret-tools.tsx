@@ -29,17 +29,17 @@ export function ObjectiveCard({ snapshot }: { snapshot: Snapshot }) {
 export function PowerControls({ snapshot, busy, committed, onAction }: { snapshot: Snapshot; busy: boolean; committed: boolean; onAction: (action: Action) => void }) {
   const [targetId, setTargetId] = useState("");
   const session = snapshot.session;
-  if (!session || session.phase !== "active-game" || committed) return null;
+  if (!session || session.phase !== "active-game") return null;
   const used = session.myPowers.length > 0;
-  const otherPlayers = snapshot.players.filter((player) => player.id !== snapshot.me && (!session.myPowerOffers.some((id) => POWER_LIST.find((power) => power.id === id)?.targetableAfterCommit) || session.round?.submittedIds.includes(player.id)));
+  const otherPlayers = snapshot.players.filter((player) => player.id !== snapshot.me);
   const selectedTarget = otherPlayers.some((player) => player.id === targetId) ? targetId : otherPlayers[0]?.id ?? "";
-  const availablePowers = POWER_LIST.filter((power) => session.myPowerOffers.includes(power.id));
+  const availablePowers = POWER_LIST.filter((power) => session.myPowerOffers.includes(power.id) && (!committed || power.targetableAfterCommit));
   return <section className="chaos-tools" aria-label="Spend Chaos">
-    <div className="chaos-tools-heading"><strong>Chaos {session.myChaos}</strong><span>Three rotating offers · earn Chaos by playing</span></div>
+    <div className="chaos-tools-heading"><strong>Chaos {session.myChaos}</strong><span>One power per game · save 3 Chaos for +1 at finale (cap +2)</span></div>
     <div className="power-list">{availablePowers.map((power) => <div className="power-option" key={power.id}>
       <div><strong>{power.name}</strong><p>{power.description}</p></div>
       {power.targetRequired && <label className="power-target">{power.name === "Read Receipt" ? "Scout" : "Mark"} <select aria-label={`${power.name} target`} value={selectedTarget} onChange={(event) => setTargetId(event.target.value)}>{otherPlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
-      <button disabled={busy || used || session.myChaos < power.cost || (power.targetRequired && !selectedTarget)} onClick={() => onAction({ type: "use-power", value: power.targetRequired ? `${power.id}:${selectedTarget}` : power.id })}>{used ? "Used" : `Use · ${power.cost}`}</button>
+      <button disabled={busy || used || (committed && !power.targetableAfterCommit) || session.myChaos < power.cost || (power.targetRequired && (!selectedTarget || Boolean(power.targetableAfterCommit && !session.round?.submittedIds.includes(selectedTarget))))} onClick={() => onAction({ type: "use-power", value: power.targetRequired ? `${power.id}:${selectedTarget}` : power.id })}>{used ? "Used" : `Use · ${power.cost}`}</button>
     </div>)}</div>
     {used && <small className="power-armed">Your power is armed for this game. Only you can see it until the reveal.</small>}
     {session.myIntel && <small className="power-armed private-intel">Private intel · {session.myIntel.playerName} locked “{session.round?.config.options.find((option) => option.id === session.myIntel?.choice)?.label ?? "a choice"}”.</small>}

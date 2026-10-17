@@ -1,6 +1,7 @@
 import type { GameEvent, MinigameDefinition, MinigameResolution, Player } from "../types";
 import { MAKE_IT_WORSE_PROMPTS, TRUST_ME_OPTIONS } from "./content";
 import { EXPANSION_GAMES } from "./expansion";
+import { ENCOUNTER_GAMES } from "./encounters";
 import { PARTY_GAMES } from "./party";
 import { withDirectorMetadata } from "../director";
 
@@ -124,7 +125,7 @@ export const pileOn: MinigameDefinition = {
     const events: GameEvent[] = [];
     for (const player of players) {
       const choice = submissions[player.id];
-      if (choice.startsWith("target:")) {
+      if (choice?.startsWith("target:")) {
         const targetId = choice.slice(7);
         const hit = Math.min(2, Math.max(0, targetCounts[targetId] - (shields.has(targetId) ? 1 : 0)));
         base[player.id] = hit ? 1 : 0;
@@ -230,7 +231,7 @@ export const hotPotato: MinigameDefinition = {
   },
 };
 
-export const MINIGAMES: Record<string, MinigameDefinition> = Object.fromEntries([splitDecision, makeItWorse, trustMe, pileOn, secretHandshake, hotPotato, ...EXPANSION_GAMES, ...PARTY_GAMES].map((game) => [game.id, withDirectorMetadata(game)]));
+export const MINIGAMES: Record<string, MinigameDefinition> = Object.fromEntries([splitDecision, makeItWorse, trustMe, pileOn, secretHandshake, hotPotato, ...EXPANSION_GAMES, ...PARTY_GAMES, ...ENCOUNTER_GAMES].map((game) => [game.id, withDirectorMetadata(game)]));
 
 export function registerMinigame(definition: MinigameDefinition) {
   if (!definition.id.trim() || MINIGAMES[definition.id]) throw new Error("A minigame with that ID is already registered");
@@ -238,14 +239,16 @@ export function registerMinigame(definition: MinigameDefinition) {
 }
 
 export function resolveAwards(history: Array<{ result: MinigameResolution }>, players: Player[]) {
-  const candidates: Array<{ id: "most-targeted" | "biggest-gambler" | "best-read" | "worst-ally" | "chaos-agent" | "most-betrayed" | "best-ally"; name: string; count: (playerId: string) => number; detail: string }> = [
+  const candidates: Array<{ id: "most-targeted" | "biggest-gambler" | "best-read" | "worst-ally" | "chaos-agent" | "most-betrayed" | "best-ally" | "promise-keeper" | "broken-word"; name: string; count: (playerId: string) => number; detail: string }> = [
     { id: "most-targeted", name: "Most Targeted", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "target" && event.targetId === id).length, detail: "callouts received" },
     { id: "biggest-gambler", name: "Biggest Gambler", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "gamble" && event.playerId === id).length, detail: "double-or-nothing risks" },
     { id: "best-read", name: "Best Read", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "read" && event.playerId === id && event.accurate).length, detail: "crowd favorites called" },
     { id: "worst-ally", name: "Worst Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayal" ? event.playerId === id : event.type === "alliance" && !event.mutual && event.playerId === id).length, detail: "betrayal moves" },
     { id: "chaos-agent", name: "Chaos Agent", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "chaos" && event.playerId === id).length, detail: "moves that shook the room" },
     { id: "most-betrayed", name: "Most Betrayed", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "betrayed" && event.playerId === id).length, detail: "times left holding the bag" },
-    { id: "best-ally", name: "Best Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "alliance" && event.mutual && event.playerId === id && event.playerId < event.targetId).length, detail: "mutual pacts made" },
+    { id: "promise-keeper", name: "Kept Their Word", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "promise" && event.playerId === id && event.kept).length, detail: "public promises kept" },
+    { id: "broken-word", name: "Changed Their Story", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "promise" && event.playerId === id && !event.kept).length, detail: "public promises broken" },
+    { id: "best-ally", name: "Best Ally", count: (id) => history.flatMap((item) => item.result.events).filter((event) => event.type === "alliance" && event.mutual && event.playerId === id).length, detail: "mutual pacts made" },
   ];
   return candidates.flatMap((award) => {
     const ranked = players.map((player, index) => ({ player, count: award.count(player.id), index })).sort((a, b) => b.count - a.count || a.index - b.index);

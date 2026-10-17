@@ -113,8 +113,21 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     const round = latest.get(host)?.session?.round;
     const choice = round?.config.options.find((option) => option.label === label)?.id;
     expect(choice).toBeTruthy();
+    const startingBeat = round?.beat?.index;
     await page.locator(".choice-button").getByText(label, { exact: true }).first().click();
-    await expect.poll(() => latest.get(page)?.session?.round?.myChoice, { timeout: 60000 }).toBe(choice);
+    await expect.poll(() => {
+      const current = latest.get(page)?.session?.round;
+      return current?.myChoice === choice || (startingBeat === 0 && current?.beat?.index === 1);
+    }, { timeout: 60000 }).toBe(true);
+    if (startingBeat === 0 && latest.get(host)?.session?.round?.beat?.index === 1) {
+      const order = latest.get(host)?.session?.round?.firstCommitPlayerId;
+      const secondBeatOrder = order ? [pages.find(candidate => latest.get(candidate)?.me === order)!, ...pages.filter(candidate => latest.get(candidate)?.me !== order)] : pages;
+      for (const candidate of secondBeatOrder) {
+        await expect(candidate.locator(".choice-button:not(:disabled)").first()).toBeEnabled({ timeout: 60000 });
+        await candidate.locator(".choice-button:not(:disabled)").first().click();
+        await expect.poll(() => latest.get(candidate)?.session?.round?.myChoice, { timeout: 60000 }).toBeTruthy();
+      }
+    }
   }
   async function finishRound(rule: string) {
     await expect(host.locator(".reveal-groups")).toBeVisible({ timeout: 60000 });

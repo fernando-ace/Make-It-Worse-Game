@@ -41,7 +41,13 @@ export function directSessionGames(seed: string, registry: Record<string, Miniga
   const ordered = arc.map((tag, slot) => seededShuffle(games.filter((game) => game.director!.sessionTags.includes(tag)), `${seed}:arc:${slot}:${tag}`));
   const selected: MinigameDefinition[] = [];
   const search = (slot: number): boolean => {
-    if (slot === arc.length) return new Set(selected.map((game) => game.director!.family)).size >= 4;
+    if (slot === arc.length) {
+      const multi = selected.filter(game => game.multiBeat).length;
+      const supportsBeats = games.filter(game => game.multiBeat).length >= 3;
+      return new Set(selected.map((game) => game.director!.family)).size >= 4
+        && (!supportsBeats || multi >= 2 && multi <= 3)
+        && selected.reduce((n, game) => n + game.director!.expectedSeconds, 0) <= 700;
+    }
     for (const game of ordered[slot]) {
       const meta = game.director!;
       if (selected.some((chosen) => chosen.id === game.id)) continue;

@@ -9,14 +9,16 @@ type ObjectiveDefinition = Omit<ObjectiveState, "progress" | "completed" | "rela
   match: (playerId: string, event: GameEvent, friendId?: string) => boolean;
 };
 
-const ALL_GAMES = ["split-decision", "make-it-worse", "trust-me", "pile-on", "secret-handshake", "hot-potato", "group-tab", "escalation-ladder", "bluff-check", "favor-bank", "auction-house", "lifeline", "group-project", "prisoners-dilemma", "split-the-difference", "golden-ticket"];
-const READ_GAMES = ["split-decision", "make-it-worse", "bluff-check"];
+const ALL_GAMES = ["cross-my-heart", "signal-noise", "last-seats", "breaking-point","split-decision", "make-it-worse", "trust-me", "pile-on", "secret-handshake", "hot-potato", "group-tab", "escalation-ladder", "bluff-check", "favor-bank", "auction-house", "lifeline", "group-project", "prisoners-dilemma", "split-the-difference", "golden-ticket"];
+const READ_GAMES = ["split-decision", "make-it-worse", "bluff-check", "signal-noise"];
 const TARGET_GAMES = ["pile-on", "hot-potato"];
-const RISK_GAMES = ["trust-me", "escalation-ladder", "auction-house"];
+const RISK_GAMES = ["trust-me", "escalation-ladder", "auction-house", "signal-noise", "last-seats", "breaking-point"];
 const ALLIANCE_GAMES = ["secret-handshake", "favor-bank"];
 const BETRAYAL_GAMES = ["trust-me", "group-tab"];
 
 export const OBJECTIVES: ObjectiveDefinition[] = [
+  { id: "promise-breaker", title: "A Change of Plans", description: "Break a public route or venue promise.", target: 1, reward: 4, compatibleGames: ["cross-my-heart", "last-seats"], match: (id, e) => e.type === "promise" && e.playerId === id && !e.kept },
+  { id: "on-record", title: "My Word Is My Bond", description: "Keep public promises in two different games.", target: 2, reward: 5, compatibleGames: ["cross-my-heart", "last-seats"], match: (id, e) => e.type === "promise" && e.playerId === id && e.kept },
   { id: "sharp-read", title: "Read the Room", description: "Correctly read the group in two different games.", target: 2, reward: 4, compatibleGames: READ_GAMES, match: (id, e) => e.type === "read" && e.playerId === id && e.accurate },
   { id: "repeat-rival", title: "A Familiar Target", description: "Target {friend} in two different games.", target: 2, reward: 4, compatibleGames: TARGET_GAMES, requiresFriend: true, match: (id, e, friend) => e.type === "target" && e.actorId === id && e.targetId === friend },
   { id: "wide-net", title: "Spread the Blame", description: "Make targeted moves in two different games.", target: 2, reward: 4, compatibleGames: TARGET_GAMES, match: (id, e) => e.type === "target" && e.actorId === id },
@@ -41,13 +43,13 @@ export const OBJECTIVES: ObjectiveDefinition[] = [
   { id: "prison-break", title: "Temptation Won", description: "Defect in the Prisoner's Dilemma.", target: 1, reward: 3, compatibleGames: ["prisoners-dilemma"], match: (id, e) => e.type === "betrayal" && e.playerId === id },
   { id: "friend-saver", title: "I've Got You", description: "Save {friend} with a successful lifeline.", target: 1, reward: 4, compatibleGames: ["lifeline"], requiresFriend: true, match: (id, e, friend) => e.type === "save" && e.actorId === id && e.targetId === friend && e.successful },
   { id: "friend-backer", title: "Hype Person", description: "Back {friend} when they get the golden ticket.", target: 1, reward: 3, compatibleGames: ["golden-ticket"], requiresFriend: true, match: (id, e, friend) => e.type === "support" && e.actorId === id && e.targetId === friend && e.successful },
-  { id: "lone-wolf", title: "Out on Your Own", description: "Use Lone Wolf successfully.", target: 1, reward: 3, compatibleGames: ALL_GAMES, match: (id, e) => e.type === "power" && e.playerId === id && e.powerId === "contrarian" && e.outcome === "success" },
-  { id: "second-wind", title: "Second Wind", description: "Use Second Wind successfully.", target: 1, reward: 3, compatibleGames: ALL_GAMES, match: (id, e) => e.type === "power" && e.playerId === id && e.powerId === "comeback" && e.outcome === "success" },
-  { id: "pocket-change", title: "Sticky Fingers", description: "Use Pocket Change successfully.", target: 1, reward: 3, compatibleGames: ALL_GAMES, match: (id, e) => e.type === "power" && e.playerId === id && e.powerId === "pickpocket" && e.outcome === "success" },
+  { id: "lone-wolf", requiredPower: "contrarian", title: "Out on Your Own", description: "Use Lone Wolf successfully.", target: 1, reward: 3, compatibleGames: ALL_GAMES, match: (id, e) => e.type === "power" && e.playerId === id && e.powerId === "contrarian" && e.outcome === "success" },
+  { id: "second-wind", requiredPower: "comeback", title: "Second Wind", description: "Use Second Wind successfully.", target: 1, reward: 3, compatibleGames: ALL_GAMES, match: (id, e) => e.type === "power" && e.playerId === id && e.powerId === "comeback" && e.outcome === "success" },
+  { id: "pocket-change", requiredPower: "pickpocket", title: "Sticky Fingers", description: "Use Pocket Change successfully.", target: 1, reward: 3, compatibleGames: ALL_GAMES, match: (id, e) => e.type === "power" && e.playerId === id && e.powerId === "pickpocket" && e.outcome === "success" },
 ];
 
 export function assignObjectives(seed: string, players: Player[], gameSlots: string[]): Record<string, ObjectiveState> {
-  const eligibleFor = (player: Player) => seededShuffle(OBJECTIVES.filter((objective) => objective.compatibleGames.filter((game) => gameSlots.includes(game)).length >= objective.target && (!objective.requiredPower || gameSlots.some((_, index) => powerOffersFor(seed, index + 1, player.id).includes(objective.requiredPower!)))), `${seed}:objective-pool:${player.id}`);
+  const eligibleFor = (player: Player) => seededShuffle(OBJECTIVES.filter((objective) => !["steady-scorer", "stockpile", "still-standing", "headliner", "late-bloomer"].includes(objective.id) && objective.compatibleGames.filter((game) => gameSlots.includes(game)).length >= objective.target && (!objective.requiredPower || gameSlots.some((_, index) => powerOffersFor(seed, index + 1, player.id).includes(objective.requiredPower!)))), `${seed}:objective-pool:${player.id}`);
   const eligibleByPlayer = players.map(eligibleFor);
   if (eligibleByPlayer.some((eligible) => !eligible.length)) throw new Error("No objectives are compatible with this session lineup");
   const used = new Set<string>();

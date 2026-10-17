@@ -4,9 +4,9 @@ import { seededShuffle } from "./seed";
 export type PowerDefinition = { id: PowerId; name: string; cost: number; description: string; targetRequired: boolean; targetableAfterCommit?: boolean };
 export const POWERS: Record<PowerId, PowerDefinition> = {
   guard: { id: "guard", name: "Soft Landing", cost: 2, description: "Cancel your negative score this game after House Rules.", targetRequired: false },
-  amplify: { id: "amplify", name: "Turn It Up", cost: 2, description: "Add +1 if your score this game is positive.", targetRequired: false },
+  amplify: { id: "amplify", name: "Turn It Up", cost: 1, description: "Add +1 if your score this game is positive.", targetRequired: false },
   bounty: { id: "bounty", name: "Side Bet", cost: 2, description: "Earn +2 if you outscore your marked friend this game.", targetRequired: true },
-  bodyguard: { id: "bodyguard", name: "Take the Hit", cost: 3, description: "Cancel one marked friend's negative score this game.", targetRequired: true },
+  bodyguard: { id: "bodyguard", name: "Take the Hit", cost: 3, description: "Cancel one marked friend's negative score this game; earn +1 for a successful rescue.", targetRequired: true },
   hex: { id: "hex", name: "Bad Omen", cost: 3, description: "Give a marked player −2 this game.", targetRequired: true },
   comeback: { id: "comeback", name: "Second Wind", cost: 2, description: "Earn +2 if you are tied for last and score points this game.", targetRequired: false },
   pickpocket: { id: "pickpocket", name: "Pocket Change", cost: 3, description: "Take 1 point from a marked player who scores this game.", targetRequired: true },

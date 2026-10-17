@@ -1,3 +1,4 @@
+import { recordPartyMetrics } from "@/lib/party-metrics";
 import { NextRequest, NextResponse } from "next/server";
 import { randomInt, randomUUID } from "node:crypto";
 import { admin } from "@/lib/server";
@@ -6,6 +7,13 @@ import { apply, join, snapshot } from "@/lib/engine";
 import type { Room } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+function sessionAdvanced(before: Room["session"], after: Room["session"]) {
+  if (!before || !after) return before !== after;
+  return before.phase !== after.phase || before.gameNumber !== after.gameNumber
+    || before.round?.beat?.index !== after.round?.beat?.index
+    || Boolean(before.round?.result) !== Boolean(after.round?.result)
+    || (before.history?.length ?? 0) !== (after.history?.length ?? 0);
+}
 export async function POST(req: NextRequest) {
   try {
     const token = req.headers.get("authorization")?.replace(/^Bearer /, "");
@@ -111,13 +119,11 @@ export async function POST(req: NextRequest) {
         apply(room, uid, body.action, now, body.actionId);
       }
       if (
-        body.op === "action" &&
-        body.action.type === "sync" &&
-        body.action.value === false
-      )
-        return NextResponse.json(snapshot(room, uid, now), {
-          headers: { "Cache-Control": "no-store" },
-        });
+        body.op === "action" && body.action.type === "sync" && body.action.value === false
+        && !sessionAdvanced(before.session, room.session)
+      ) return NextResponse.json(snapshot(room, uid, now), {
+        headers: { "Cache-Control": "no-store" },
+      });
       room.revision = revision + 1;
       const { data: committed, error: commitError } = await db.rpc(
         "cr_commit",
@@ -125,6 +131,7 @@ export async function POST(req: NextRequest) {
       );
       if (commitError) throw new Error(commitError.message);
       if (committed) {
+        recordPartyMetrics(before, room, body.action);
         await recordBetaEvents(db, committedEvents(before, room, body.op, body.action, alreadyMember, uid));
         if (body.op === "leave")
           return NextResponse.json(
@@ -181,7 +188,7 @@ function committedEvents(before: Room, after: Room, op: string, action: { type?:
     }
     if (previousSession?.phase === "active-game" && session?.phase === "game-results") add("game_completed");
     if (action.type === "use-power" && typeof action.value === "string") add("power_used", { powerId: action.value.split(":", 1)[0] });
-    if (action.type === "reveal-objectives" && !previousSession?.objectivesRevealedBy.includes(uid) && session?.objectivesRevealedBy.includes(uid)) add("objective_revealed");
+    if (action.type === "reveal-objectives" && !(previousSession?.objectivesRevealedBy ?? []).includes(uid) && (session?.objectivesRevealedBy ?? []).includes(uid)) add("objective_revealed");
     if (action.type === "select-rule" && session?.history.at(-1)?.selectedRule) add("house_rule_selected", { houseRuleId: session.history.at(-1)!.selectedRule!.id });
     if (session) {
       const priorObjectives = previousSession?.objectives ?? {};

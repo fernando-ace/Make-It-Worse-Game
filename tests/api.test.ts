@@ -86,6 +86,33 @@ describe("authenticated party room API", () => {
     expect((await request("p", { op: "action", code: room.code, action: { type: "sync" } })).data.session.round.result.choices).toEqual({ c: hostChoice, p: guestChoice });
   });
 
+  it("persists deadline transitions discovered during a reconnect sync", async () => {
+    const host = await create();
+    await request("p", { op: "join", code: host.code, name: "Friend" });
+    await request("c", { op: "action", code: host.code, action: { type: "start" } });
+    const room = store.rooms.get(host.code)!;
+    room.session!.gameSlots[0] = "cross-my-heart";
+    room.session!.gameConfig = MINIGAMES["cross-my-heart"].config({ players: room.players, gameNumber: 1 });
+    store.rooms.set(host.code, room);
+    await request("c", { op: "action", code: host.code, action: { type: "begin-game" } });
+    const active = store.rooms.get(host.code)!;
+    active.session!.round!.deadlineAt = Date.now() - 1;
+    const oldRevision = active.revision;
+    store.rooms.set(host.code, active);
+    const between = await request("p", { op: "action", code: host.code, action: { type: "sync", value: false } });
+    expect(between.status).toBe(200);
+    expect(between.data.session.round.beat.index).toBe(1);
+    expect(store.rooms.get(host.code)!.revision).toBe(oldRevision + 1);
+    expect(store.rooms.get(host.code)!.session!.round!.beat!.firstChoices).toEqual({});
+
+    const secondBeat = store.rooms.get(host.code)!;
+    secondBeat.session!.round!.deadlineAt = Date.now() - 1;
+    store.rooms.set(host.code, secondBeat);
+    const result = await request("p", { op: "action", code: host.code, action: { type: "sync", value: false } });
+    expect(result.data.session.phase).toBe("game-results");
+    expect(store.rooms.get(host.code)!.session!.history).toHaveLength(1);
+  });
+
   it("preserves identity on reconnect and keeps separate rooms private", async () => {
     const first = await create();
     await request("p", { op: "join", code: first.code, name: "Friend" });
@@ -111,10 +138,10 @@ describe("authenticated party room API", () => {
     const powerId = (initial.data.session.myPowerOffers as string[]).find((id) => !POWERS[id as keyof typeof POWERS].targetRequired)!;
     const spend = { op: "action", code: host.code, action: { type: "use-power", value: powerId }, actionId: "api-power-once" };
     const spent = await request("c", spend);
-    expect(spent.data.session.myChaos).toBe(0);
+    expect(spent.data.session.myChaos).toBe(2 - POWERS[powerId as keyof typeof POWERS].cost);
     expect(spent.data.session.myPowers).toHaveLength(1);
     const duplicate = await request("c", { ...spend, action: { type: "use-power", value: powerId } });
-    expect(duplicate.data.session.myChaos).toBe(0);
+    expect(duplicate.data.session.myChaos).toBe(2 - POWERS[powerId as keyof typeof POWERS].cost);
     expect(duplicate.data.session.myPowers[0].id).toBe(powerId);
     const guest = await request("p", { op: "action", code: host.code, action: { type: "sync" } });
     expect(guest.data.session.myChaos).toBe(2);

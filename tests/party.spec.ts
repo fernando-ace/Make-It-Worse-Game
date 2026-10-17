@@ -6,6 +6,7 @@ import type { Snapshot } from "../lib/types";
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 
 test("two friends complete a full mobile session without horizontal overflow", async ({ browser }) => {
+  test.skip(!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || !process.env.SUPABASE_SECRET_KEY, "Requires a dedicated non-production Supabase project.");
   test.setTimeout(900000);
   const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
   const [host, guest] = await Promise.all(contexts.map((context) => context.newPage()));
@@ -65,9 +66,15 @@ test("two friends complete a full mobile session without horizontal overflow", a
         await expect(guest.locator(".reveal-list")).toHaveCount(0);
         const firstId = latest.get(host)!.session!.round!.firstCommitPlayerId;
         const ordered = firstId ? [pagesFor(firstId), ...[host, guest].filter((page) => latest.get(page)?.me !== firstId)] : [host, guest];
-        for (const page of ordered) {
-          await page.locator(".choice-button:not(:disabled)").first().click();
-          await expect.poll(() => Boolean(latest.get(page)?.session?.round?.myChoice)).toBe(true);
+        for (let beat = 0; beat < 2; beat++) {
+          if (beat === 1 && !latest.get(host)?.session?.round?.beat) break;
+          for (const page of ordered) {
+            const choice = page.locator(".choice-button:not(:disabled)").first();
+            await choice.click();
+            if (beat === 0 && latest.get(page)?.session?.round?.beat) {
+              await expect.poll(() => latest.get(page)?.session?.round?.beat?.index).toBe(1);
+            } else await expect.poll(() => Boolean(latest.get(page)?.session?.round?.myChoice)).toBe(true);
+          }
         }
         await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
         await expect(host.locator(".reveal-row")).toHaveCount(2);
