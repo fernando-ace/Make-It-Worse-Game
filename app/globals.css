@@ -56,3 +56,5 @@ button,input{font:inherit}button,a,input{-webkit-tap-highlight-color:transparent
 .beat-board { padding: 16px; margin: 16px 0; border: 1px solid var(--border, #777); border-radius: 16px; text-align: left; overflow-wrap: anywhere; }
 .beat-board p { margin: 6px 0; font-size: 15px; }
 .private-report { border-left: 3px solid #b7f86b; padding: 12px; margin-top: 12px; background: #20251b; color: #f2f8e9; }
+@media(max-width:760px){.decision-phase{display:flex;flex-direction:column;align-items:stretch}.decision-phase>.active-rule{order:5}.decision-phase>.first-commit-note{order:6}.decision-phase>.choice-grid{order:7}.decision-phase>.submitted-status{order:8}.decision-phase>.answer-people{order:9}.decision-phase>.chaos-tools{order:10}.decision-phase>.chaos-meter{order:11}.decision-phase>.history-cues{order:12}.player-name,.score-row>span:nth-child(2){min-width:0;overflow-wrap:anywhere}.phase-card p,.phase-card strong{overflow-wrap:anywhere}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
