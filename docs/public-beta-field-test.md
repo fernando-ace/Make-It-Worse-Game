@@ -40,3 +40,12 @@ Do not record names, raw choices, private hints, objective text, or identifiable
 Treat a session as blocked if a player cannot join or reconnect, hidden choices appear before reveal, committed progress disappears, a player cannot complete a turn, or scores/finale results are wrong. Record app build, device/browser, approximate time, cohort size, and phase. Do not include private answers or identifiers in issue reports.
 
 Complete one [beta results template](beta-results-template.md) per session. Summarize sanitized server-derived exports locally with `npm run beta:analyze -- <sanitized-export.json>`; the analyzer rejects private feedback and unapproved fields. Automated evidence cannot answer which game was fun or whether a player intended a betrayal.
+
+## Field test checklist
+
+1. Use the approved non-production build; confirm each player has a separate browser profile.
+2. Note the build, approximate start time, opaque session key, player count, and device/browser mix.
+3. Play through the finale. Observe confusion, waiting, negotiation, reactions, and requests to replay without coaching the group.
+4. If someone refreshes or briefly loses network, confirm they return to the same player and phase. Record any lost choice or unexpected private information as a blocker.
+5. Ask the short post-game questions and complete one results template. Keep observations separate from hypotheses.
+6. Export only approved sanitized evidence. Keep the key/time cross-reference and raw notes private; never attach participant identity or private answers.
