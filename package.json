@@ -10,8 +10,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:simulation": "vitest run tests/session-simulation.test.ts",
+    "test:balance": "SIMULATION_SESSIONS=10000 SIMULATION_REPORT_DIR=work vitest run tests/session-simulation.test.ts",
+    "beta:analyze": "node scripts/beta-analyze.mjs",
     "test:live": "playwright test tests/live.spec.ts",
-    "test:party": "playwright test tests/party.spec.ts"
+    "test:party": "playwright test tests/party.spec.ts",
+    "test:party-night-e2e": "playwright test tests/multibeat.spec.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomInt, randomUUID } from "node:crypto";
 import { admin } from "@/lib/server";
 import { betaSessionKey, recordBetaEvents, type BetaEvent } from "@/lib/beta";
-import { apply, join, snapshot } from "@/lib/engine";
+import { apply, directSessionGames, join, MINIGAMES, snapshot } from "@/lib/engine";
+import { assignObjectives } from "@/lib/objectives";
 import type { Room } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -117,6 +118,18 @@ export async function POST(req: NextRequest) {
         if (!body.action || typeof body.action.type !== "string")
           throw new Error("Invalid action");
         apply(room, uid, body.action, now, body.actionId);
+        // This server-side lineup override exists only for local/CI browser tests.
+        // It is driven by the test process environment, never by request data, and
+        // is disabled for every production runtime even if misconfigured.
+        const testGameId = process.env.NODE_ENV !== "production" && process.env.E2E_TEST_MODE === "1"
+          && body.action.type === "start" ? process.env.E2E_TEST_GAME_ID : undefined;
+        if (testGameId && room.session && MINIGAMES[testGameId]?.multiBeat) {
+          const session = room.session;
+          const lineup = directSessionGames(session.seed, MINIGAMES, room.players.length);
+          session.gameSlots = [testGameId, ...lineup.filter(id => id !== testGameId).slice(0, 5)];
+          session.gameConfig = MINIGAMES[testGameId].config({ players: room.players, gameNumber: 1 });
+          session.objectives = assignObjectives(session.seed, room.players, session.gameSlots);
+        }
       }
       if (
         body.op === "action" && body.action.type === "sync" && body.action.value === false
