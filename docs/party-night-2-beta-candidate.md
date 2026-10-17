@@ -5,10 +5,10 @@
 - Requested base branch: `feat/party-night-2`
 - Party Night 2.0 commits verified: `cd1112abc70d443cbbe50daeabc1563edae060d9` (gameplay), `ca263a371479d598fea8aec1f15135f3adfe6189` (documentation)
 - Candidate branch: `feat/party-night-2-beta-candidate`
-- Candidate head: `92f7d3c9af4d77124f35875dd79bb891f77f490a`
+- Last hosted validation code commit: `92f7d3c9af4d77124f35875dd79bb891f77f490a`
 - Master base at audit: `6d8fec7434255420aba6501becec3c05afe94b33`
 
-Candidate commits after `ca263a3`: `407488f`, `31f4897`, `f183921`, `9c3449f`, `7a28c78`, `a995ef8`, `b130949`, `633fd75`, and `92f7d3c`. The branch is pushed and is not merged.
+Candidate commits after `ca263a3`: `407488f`, `31f4897`, `f183921`, `9c3449f`, `7a28c78`, `a995ef8`, `b130949`, `633fd75`, `92f7d3c`, and the report-only update `bb9859d`. The branch is pushed and is not merged. Hosted validation passed on `92f7d3c`; `bb9859d` only records those results.
 
 ## Party Night implementation audit
 
