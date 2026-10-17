@@ -1,0 +1,11 @@
+{
+  "events": [
+    { "name": "session_started", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "player_count": 4 },
+    { "name": "game_completed", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "game_id": "cross-my-heart", "game_number": 1 },
+    { "name": "reconnect_succeeded", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "name": "session_completed", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "player_count": 4 }
+  ],
+  "metrics": [
+    { "sessionKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": 2, "gameId": "cross-my-heart", "gameNumber": 1, "completed": 1, "beatTransition": 1, "decisionMs": 1000, "gameDurationMs": 1000, "firstBeatDurationMs": 300, "secondBeatDurationMs": 700, "chaosEarned": 2, "chaosSpent": 1, "sessionDurationMs": 300000, "sessionCompleted": 1 }
+  ]
+}
