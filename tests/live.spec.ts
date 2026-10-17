@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import type { GameOption, Snapshot } from "../lib/types";
 import { MINIGAMES } from "../lib/games";
 import { POWERS } from "../lib/powers";
+import { expectEphemeralSupabase, interruptAndReconnect, reconnectByReload, recreateContextWithIdentity } from "./helpers/reconnect";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 let contexts: BrowserContext[] = [];
@@ -33,7 +34,8 @@ test.afterEach(async () => {
 });
 
 test("three players complete the six-game Make It Worse session with privacy, House Rules, reconnect, and awards", async ({ browser }) => {
-  test.skip(!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || !process.env.SUPABASE_SECRET_KEY, "Requires the configured real Supabase project.");
+  test.skip(!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || !process.env.SUPABASE_SECRET_KEY, "Requires ephemeral local Supabase.");
+  expectEphemeralSupabase();
   test.setTimeout(900000);
   contexts = await Promise.all([browser.newContext(), browser.newContext(), browser.newContext()]);
   const pages = await Promise.all(contexts.map((context) => context.newPage()));
@@ -79,6 +81,19 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     await expect(page.locator(".player-row").filter({ hasText: playerName })).toBeVisible();
   }
   await expect(host.locator(".player-row")).toHaveCount(3);
+  const lobbyIdentity = latest.get(guestOne)!.me;
+  await reconnectByReload(guestOne, () => latest.get(guestOne));
+  expect(latest.get(guestOne)?.players.map(player => player.id)).toContain(lobbyIdentity);
+  const oldGuestContext = guestOne.context();
+  const guestContextIndex = contexts.indexOf(oldGuestContext);
+  const recreatedGuest = await recreateContextWithIdentity(browser, guestOne, (page, snapshot) => {
+    latest.set(page, snapshot);
+    testAuthUserIds.add(snapshot.me);
+  });
+  contexts[guestContextIndex] = recreatedGuest.context;
+  pages[1] = recreatedGuest.page;
+  guestOne = recreatedGuest.page;
+  expect(latest.get(guestOne)?.me).toBe(lobbyIdentity);
   const pageForName = (name: string) => pages.find((page) => {
     const snapshot = latest.get(page);
     return snapshot?.players.find((player) => player.id === snapshot.me)?.name === name;
@@ -99,6 +114,11 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       await host.getByRole("button", { name: "Next game" }).click();
       await expect.poll(() => latest.get(host)?.session?.gameNumber, { timeout: 60000 }).toBe(number);
       await expect(host.getByRole("button", { name: `Start game ${number}` })).toBeVisible();
+      if (number === 2) {
+        const laterGame = await reconnectByReload(guestOne, () => latest.get(guestOne));
+        expect(laterGame.after.session?.phase).toBe("game-intro");
+        expect(laterGame.after.session?.gameNumber).toBe(number);
+      }
     }
     const gameName = await host.locator(".intro-phase h2").innerText();
     await host.getByRole("button", { name: `Start game ${number}` }).click();
@@ -145,6 +165,9 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     await expect(host.locator(".reveal-row")).toHaveCount(3);
     await expect.poll(() => latest.get(host)?.session?.phase, { timeout: 60000 }).toBe("game-results");
     if (latest.get(host)!.session!.gameNumber === latest.get(host)!.session!.gameSlots.length) {
+      const finale = await reconnectByReload(guestOne, () => latest.get(guestOne));
+      expect(finale.after.session?.phase).toBe("game-results");
+      expect(finale.after.session?.history).toHaveLength(6);
       await host.getByRole("button", { name: "See final results" }).click();
       await expect.poll(() => latest.get(host)?.session?.phase, { timeout: 60000 }).toBe("final-results");
       return;
@@ -154,6 +177,11 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     await expect(winnerPage.getByRole("button", { name: "Choose a House Rule" })).toBeVisible({ timeout: 60000 });
     await winnerPage.getByRole("button", { name: "Choose a House Rule" }).click();
     await expect.poll(() => winnerPage.locator(".rule-card").count(), { timeout: 60000 }).toBeGreaterThan(0);
+    if (latest.get(winnerPage)?.session?.gameNumber === 1) {
+      const selection = await reconnectByReload(winnerPage, () => latest.get(winnerPage));
+      expect(selection.after.session?.phase).toBe("house-rule-selection");
+      expect(selection.after.session?.offeredRules).toEqual(selection.before.session?.offeredRules);
+    }
     for (const page of pages.filter((candidate) => candidate !== winnerPage)) await expect(page.locator(".rule-card").first()).toBeDisabled();
     const offers = latest.get(winnerPage)!.session!.offeredRules;
     const requested = offers.find((offer) => offer.name === rule);
@@ -168,6 +196,11 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   await host.getByRole("button", { name: "Start the party" }).click();
   await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
   await expect.poll(() => latest.get(host)?.session).not.toBeNull();
+  const intro = latest.get(guestOne)!;
+  const outage = await interruptAndReconnect(guestOne.context(), guestOne, () => latest.get(guestOne));
+  expect(outage.before.me).toBe(intro.me);
+  expect(outage.after.session?.phase).toBe("game-intro");
+  expect(outage.after.session?.gameNumber).toBe(intro.session?.gameNumber);
   const selectedGames = latest.get(host)!.session!.gameSlots;
   expect(selectedGames).toHaveLength(6);
   expect(new Set(selectedGames).size).toBe(6);
@@ -268,6 +301,13 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     await expect(host.locator(".reveal-row")).toHaveCount(3);
     await expect.poll(() => latest.get(host)?.session?.phase, { timeout: 60000 }).toBe("game-results");
     await finishRound(ruleByRound[number - 1]);
+    if (number === 1) {
+      const intermission = latest.get(guestOne)!;
+      const restored = await reconnectByReload(guestOne, () => latest.get(guestOne));
+      expect(restored.before.session?.phase).toBe("intermission");
+      expect(restored.after.session?.phase).toBe(intermission.session?.phase);
+      expect(restored.after.session?.activeRules).toEqual(intermission.session?.activeRules);
+    }
     if (gameId === "make-it-worse") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "read")).toBe(true);
     if (gameId === "trust-me") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayal")).toBe(true);
     if (gameId === "secret-handshake") expect(latest.get(host)?.session?.round?.result?.events.some((event) => event.type === "betrayed")).toBe(true);
@@ -283,6 +323,9 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   await host.getByRole("button", { name: "Reveal secret objectives" }).click();
   await expect(host.locator(".objective-result")).toHaveCount(3);
   expect(latest.get(host)?.session?.objectiveReveal).toBeTruthy();
+  const reveal = latest.get(host)!.session!.objectiveReveal;
+  await reconnectByReload(host, () => latest.get(host));
+  expect(latest.get(host)?.session?.objectiveReveal).toEqual(reveal);
   await host.getByRole("button", { name: "Reveal party awards" }).click();
   await expect(host.locator(".rule-explainer").getByText(/Most Targeted:|Best Read:|Biggest Gambler:|Worst Ally:|Chaos Agent:|Best Ally:/).first()).toBeVisible();
   await host.getByRole("button", { name: "Reveal session records" }).click();
@@ -295,6 +338,8 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
 
   await host.getByRole("button", { name: "Run it back with new games" }).click();
   await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
+  const replay = await reconnectByReload(host, () => latest.get(host));
+  expect(replay.after.session?.phase).toBe("game-intro");
   const retry = latest.get(host)!;
   expect(retry.session?.gameSlots).not.toEqual(selectedGames);
   expect(retry.session?.myChaos).toBe(2);

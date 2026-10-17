@@ -66,6 +66,11 @@ export function partyMetrics(before: Room, after: Room, action?: Action) {
   };
 }
 export function recordPartyMetrics(before: Room, after: Room, action?: Action) {
-  const metrics = partyMetrics(before, after, action);
-  if (metrics) console.info("PARTY_METRICS", JSON.stringify(metrics));
+  try {
+    const metrics = partyMetrics(before, after, action);
+    if (metrics) console.info("PARTY_METRICS", JSON.stringify(metrics));
+  } catch {
+    // A metrics serialization or logging failure happens after the authoritative
+    // room commit and must not turn a successful action into a client retry.
+  }
 }

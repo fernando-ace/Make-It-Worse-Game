@@ -2,7 +2,9 @@ name: Party Night beta candidate
 
 on:
   push:
-    branches: [feat/party-night-2-beta-candidate]
+    branches:
+      - feat/party-night-2-beta-candidate
+      - feat/party-night-2-field-test-release
   pull_request:
     branches: [master]
 
@@ -98,6 +100,21 @@ jobs:
           echo "NEXT_TELEMETRY_DISABLED=1" >> "$GITHUB_ENV"
       - run: npm run test:live
       - run: npm run test:party
+      - name: Verify single-beat browser reconnect flow
+        run: npm run test:reconnect
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: split-decision
+      - name: Verify full-stack multi-beat deadline expiry
+        run: npm run test:deadline
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: cross-my-heart
+      - name: Verify eight-player mobile edge cases
+        run: npm run test:mobile-edge
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: secret-handshake
       - name: Upload browser diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4

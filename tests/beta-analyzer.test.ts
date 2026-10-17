@@ -16,4 +16,21 @@ describe("beta evidence analyzer", () => {
     expect(() => analyze([{ name: "game_completed", player_name: "Ada" }])).toThrow(/sensitive field/);
     expect(() => analyze([{ name: "game_completed", comment: "private note" }])).toThrow(/sensitive field/);
   });
+
+  it("aggregates reconnect, abandonment, multi-beat timing, replay, legacy games, rules, powers, and Chaos deterministically", () => {
+    const fixture = JSON.parse(readFileSync(new URL("./fixtures/beta-evidence-field-matrix.json", import.meta.url), "utf8"));
+    const first = analyze(fixture);
+    expect(analyze(fixture)).toEqual(first);
+    expect(first.sample.sessions).toBe(4);
+    expect(first.completion).toEqual({ started: 3, completed: 1, replay: 1 });
+    expect(first.reconnects).toEqual({ attempts: 2, succeeded: 1, failed: 1 });
+    expect(first.gameAppearance).toEqual({ "cross-my-heart": 1, "make-it-worse": 1, "signal-noise": 1 });
+    expect(first.metrics).toMatchObject({ completedGames: 3, beatTransitions: 2, meanFirstBeatMs: 35000, meanSecondBeatMs: 52500, chaosEarned: 3, chaosSpent: 4, powerSuccesses: 1, powerMisses: 1, replays: 1, ruleScoringApplications: 1 });
+    expect(first.evidenceNote).toContain("fewer than 10 sessions");
+  });
+
+  it("rejects the malformed export fixture", () => {
+    const fixture = JSON.parse(readFileSync(new URL("./fixtures/beta-evidence-malformed.json", import.meta.url), "utf8"));
+    expect(() => analyze(fixture)).toThrow(/sensitive field/);
+  });
 });

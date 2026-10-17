@@ -86,8 +86,13 @@ export async function POST(req: NextRequest) {
       const { data, error } = await db.rpc("cr_read", { p_code: code });
       if (error) throw new Error(error.message);
       if (!data) throw new Error("Room not found");
-      const room = data.room as Room,
-        now = Number(data.now);
+      const room = data.room as Room;
+      const serverNow = Number(data.now);
+      // A bounded clock offset makes deadline races deterministic in local/CI
+      // browser tests. Production always uses the Supabase server clock.
+      const testClockOffset = process.env.NODE_ENV !== "production" && process.env.E2E_TEST_MODE === "1"
+        ? Number(req.headers.get("x-e2e-clock-offset-ms")) : 0;
+      const now = serverNow + (Number.isFinite(testClockOffset) && testClockOffset >= 0 && testClockOffset <= 300_000 ? testClockOffset : 0);
       const revision = room.revision;
       const before = structuredClone(room);
       const alreadyMember = room.players.some((player) => player.id === uid);
@@ -123,7 +128,7 @@ export async function POST(req: NextRequest) {
         // is disabled for every production runtime even if misconfigured.
         const testGameId = process.env.NODE_ENV !== "production" && process.env.E2E_TEST_MODE === "1"
           && body.action.type === "start" ? process.env.E2E_TEST_GAME_ID : undefined;
-        if (testGameId && room.session && MINIGAMES[testGameId]?.multiBeat) {
+        if (testGameId && room.session && Object.hasOwn(MINIGAMES, testGameId)) {
           const session = room.session;
           const lineup = directSessionGames(session.seed, MINIGAMES, room.players.length);
           session.gameSlots = [testGameId, ...lineup.filter(id => id !== testGameId).slice(0, 5)];

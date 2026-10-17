@@ -1,11 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { existsSync } from "node:fs";
 import type { Snapshot } from "../lib/types";
+import { expectEphemeralSupabase, reconnectByReload } from "./helpers/reconnect";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 
 test("selected Party Night two-beat game survives refresh and resolves through the real room API", async ({ browser }) => {
   test.skip(!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || !process.env.SUPABASE_SECRET_KEY || !process.env.E2E_TEST_GAME_ID, "Requires local Supabase and a server-selected E2E_TEST_GAME_ID.");
+  expectEphemeralSupabase();
   const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
   const [host, guest] = await Promise.all(contexts.map(context => context.newPage()));
   const latest = new Map<Page, Snapshot>();
@@ -42,6 +44,8 @@ test("selected Party Night two-beat game survives refresh and resolves through t
     const firstHostChoice = latest.get(host)!.session!.round!.config.options[0].id;
     await host.locator(".choice-button:not(:disabled)").first().click();
     await expect.poll(() => latest.get(host)?.session?.round?.myChoice).toBe(firstHostChoice);
+    const afterBeatOneCommit = await reconnectByReload(host, () => latest.get(host));
+    expect(afterBeatOneCommit.after.session?.round?.myChoice).toBe(firstHostChoice);
     expect(latest.get(guest)?.session?.round?.myChoice).toBeNull();
     expect(latest.get(guest)?.session?.round?.beat?.publicLines).toEqual([]);
     expect(latest.get(guest)?.session?.round).not.toHaveProperty("submissions");
@@ -62,15 +66,15 @@ test("selected Party Night two-beat game survives refresh and resolves through t
     expect(hostFirstChoice).toBe(firstHostChoice);
     const guestFirstChoice = latest.get(guest)!.session!.round!.beat!.myFirstChoice;
     expect(guestFirstChoice).not.toBe(hostFirstChoice);
-    await guest.reload();
-    await expect.poll(() => latest.get(guest)?.session?.round?.beat?.index).toBe(1);
-    expect(latest.get(guest)?.session?.round?.myChoice).toBeNull();
+    const afterBeatTransition = await reconnectByReload(guest, () => latest.get(guest));
+    expect(afterBeatTransition.after.session?.round?.beat?.index).toBe(1);
+    expect(afterBeatTransition.after.session?.round?.myChoice).toBeNull();
     expect(latest.get(guest)?.session?.round?.beat?.myFirstChoice).toBe(guestFirstChoice);
     const guestSecondChoice = latest.get(guest)!.session!.round!.config.options[1].id;
     await guest.locator(".choice-button:not(:disabled)").nth(1).click();
     await expect.poll(() => latest.get(guest)?.session?.round?.myChoice).toBe(guestSecondChoice);
-    await guest.reload();
-    await expect.poll(() => latest.get(guest)?.session?.round?.beat?.index).toBe(1);
+    const afterSecondBeatCommit = await reconnectByReload(guest, () => latest.get(guest));
+    expect(afterSecondBeatCommit.after.session?.round?.beat?.index).toBe(1);
     expect(latest.get(guest)?.me).toBe(guestId);
     expect(latest.get(guest)?.session?.round?.beat?.myFirstChoice).toBe(guestFirstChoice);
     expect(latest.get(guest)?.session?.round?.myChoice).toBe(guestSecondChoice);
@@ -80,6 +84,9 @@ test("selected Party Night two-beat game survives refresh and resolves through t
       await expect.poll(() => latest.get(host)?.session?.round?.myChoice).toBeTruthy();
     }
     await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
+    const resultReconnect = await reconnectByReload(host, () => latest.get(host));
+    expect(resultReconnect.after.session?.phase).toBe("game-results");
+    expect(resultReconnect.after.session?.history).toHaveLength(1);
     await expect(host.locator(".reveal-row")).toHaveCount(2);
     expect(latest.get(host)?.session?.history).toHaveLength(1);
     expect(latest.get(host)?.session?.scores).toBeDefined();
