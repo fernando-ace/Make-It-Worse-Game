@@ -6,6 +6,8 @@ The deterministic Session Director coverage in `tests/engine.test.ts` constructs
 
 The same engine suite validates role-filtered snapshots, each registered game's validation and deterministic result, rule stacking/scoring, power costs and effects, winner-only selection, bounded finale bonuses, event-award tie breaking, and a clean same-room restart. A focused House Rule case checks the four-card offer cap, future-family compatibility, and targeted-move scoring.
 
+Run `npm run test:balance` for a 10,000-session matrix. It uses the same fixed deterministic player policy as the 1,000-session regression, covers 2–8 players, and writes machine-readable JSON plus a human-readable Markdown summary under the ignored local `work/` directory. The test log also prints a `FULL_SESSION_SIMULATION` JSON record. These are descriptive synthetic signals, not player preference estimates.
+
 ## Findings and changes
 
 - Uniform random game selection did not provide a deliberate arc. The director now uses game metadata and seeded candidate scoring while preserving reproducible lineups.

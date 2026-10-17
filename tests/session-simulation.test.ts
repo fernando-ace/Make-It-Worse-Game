@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { apply, MINIGAMES, powerOffersFor, POWER_LIST, selectSessionGames, SESSION_GAME_COUNT } from "../lib/engine";
 import { OBJECTIVES, assignObjectives } from "../lib/objectives";
 import { seededShuffle } from "../lib/seed";
@@ -95,11 +97,18 @@ function runSeededSession(seed: string, playerCount: number) {
 }
 
 describe("seeded full-session simulations", () => {
-  it("completes 1,000 deterministic sessions across 2–8 players and measures key outcomes", () => {
+  it("completes a deterministic session matrix across 2–8 players and measures key outcomes", () => {
+    const sessionCount = Number(process.env.SIMULATION_SESSIONS ?? 1_000);
     const stats = {
       sessions: 0,
       players: Object.fromEntries(Array.from({ length: 7 }, (_, index) => [index + 2, 0])) as Record<number, number>,
       gameAppearances: Object.fromEntries(Object.keys(MINIGAMES).map((id) => [id, 0])) as Record<string, number>,
+      gameAppearancesByPlayers: Object.fromEntries(Array.from({ length: 7 }, (_, index) => [index + 2, Object.fromEntries(Object.keys(MINIGAMES).map(id => [id, 0]))])) as Record<number, Record<string, number>>,
+      scoreContributionsByGame: Object.fromEntries(Object.keys(MINIGAMES).map(id => [id, [] as number[]])) as Record<string, number[]>,
+      multiBeatByPlayers: Object.fromEntries(Array.from({ length: 7 }, (_, index) => [index + 2, 0])) as Record<number, number>,
+      objectiveRewards: 0,
+      objectiveAssignments: 0,
+      familyAdjacencyRepeats: 0,
       finalScoreMin: Number.POSITIVE_INFINITY,
       finalScoreMax: Number.NEGATIVE_INFINITY,
       tiedWinnerSessions: 0,
@@ -120,16 +129,23 @@ describe("seeded full-session simulations", () => {
       uniqueLineups: new Set<string>(),
     };
 
-    for (let index = 0; index < 1_000; index++) {
+    for (let index = 0; index < sessionCount; index++) {
       const playerCount = 2 + (index % 7);
       const seed = `full-session:${index}`;
       const result = runSeededSession(seed, playerCount);
       stats.sessions++;
       stats.players[playerCount]++;
       stats.uniqueLineups.add(result.gameSlots.join("|"));
-      for (const gameId of result.gameSlots) stats.gameAppearances[gameId]++;
+      for (let slot = 0; slot < result.gameSlots.length; slot++) {
+        const gameId = result.gameSlots[slot];
+        stats.gameAppearances[gameId]++;
+        stats.gameAppearancesByPlayers[playerCount][gameId]++;
+        if (MINIGAMES[gameId].multiBeat) stats.multiBeatByPlayers[playerCount]++;
+        if (slot > 0 && MINIGAMES[gameId].director!.family === MINIGAMES[result.gameSlots[slot - 1]].director!.family) stats.familyAdjacencyRepeats++;
+      }
       for (const game of result.history) {
         if (MINIGAMES[game.minigameId].multiBeat) stats.multiBeatGames++;
+        stats.scoreContributionsByGame[game.minigameId].push(...Object.values(game.result.points));
         for (const event of game.result.events) {
           if (event.type === "power") {
             stats.powerUses++;
@@ -142,7 +158,9 @@ describe("seeded full-session simulations", () => {
         for (const rule of game.rules) stats.selectedRules.add(rule.id);
         if (game.selectedRule) stats.ruleActivations++;
       }
+      stats.objectiveAssignments += Object.keys(result.objectives).length;
       stats.completedObjectives += Object.values(result.objectives).filter((objective) => objective.completed).length;
+      stats.objectiveRewards += Object.values(result.objectives).filter((objective) => objective.completed).reduce((sum, objective) => sum + objective.reward, 0);
       for (const amount of Object.values(result.chaos)) {
         stats.chaosSaved += amount;
         stats.finaleChaosPoints += Math.min(2, Math.floor(amount / 3));
@@ -166,8 +184,8 @@ describe("seeded full-session simulations", () => {
       if (index < 20) expect(runSeededSession(seed, playerCount)).toEqual(result);
     }
 
-    expect(stats.sessions).toBe(1_000);
-    expect(Object.values(stats.players)).toEqual([143, 143, 143, 143, 143, 143, 142]);
+    expect(stats.sessions).toBe(sessionCount);
+    expect(Object.values(stats.players).reduce((sum, count) => sum + count, 0)).toBe(sessionCount);
     expect(stats.uniqueLineups.size).toBeGreaterThan(100);
     expect(Object.values(stats.gameAppearances).every((count) => count > 0)).toBe(true);
     expect(stats.tiedWinnerSessions).toBeGreaterThan(0);
@@ -182,11 +200,18 @@ describe("seeded full-session simulations", () => {
     expect(stats.selectedRules.size).toBeGreaterThanOrEqual(5);
     expect(Number.isFinite(stats.finalScoreMin) && Number.isFinite(stats.finalScoreMax)).toBe(true);
 
-    console.info("FULL_SESSION_SIMULATION", JSON.stringify({
+    const scoreDistribution = Object.fromEntries(Object.entries(stats.scoreContributionsByGame).map(([gameId, values]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
+      return [gameId, { actions: values.length, mean: values.length ? values.reduce((sum, score) => sum + score, 0) / values.length : null, median, negativeFrequency: values.length ? values.filter(value => value < 0).length / values.length : 0 }];
+    }));
+    const summary = {
       sessions: stats.sessions,
       players: stats.players,
       uniqueLineups: stats.uniqueLineups.size,
       gameAppearances: stats.gameAppearances,
+      gameAppearancesByPlayers: stats.gameAppearancesByPlayers,
+      scoreContributionsByGame: scoreDistribution,
       finalScoreRange: [stats.finalScoreMin, stats.finalScoreMax],
       tiedWinnerSessions: stats.tiedWinnerSessions,
       finaleComebacks: stats.finaleComebacks,
@@ -194,11 +219,47 @@ describe("seeded full-session simulations", () => {
       powerOutcomes: { successes: stats.powerSuccesses, misses: stats.powerMisses },
       chaos: { earned: stats.chaosEarned, spent: stats.chaosSpent, heldAtFinale: stats.chaosSaved, finalePoints: stats.finaleChaosPoints },
       multiBeatGames: stats.multiBeatGames,
+      multiBeatByPlayers: stats.multiBeatByPlayers,
       leadChanges: stats.leadChanges,
       runawayGaps: stats.runaways,
+      familyAdjacencyRepeats: stats.familyAdjacencyRepeats,
       ruleActivations: stats.ruleActivations,
-      completedObjectives: stats.completedObjectives,
+      objectives: { assigned: stats.objectiveAssignments, completed: stats.completedObjectives, completionRate: stats.completedObjectives / stats.objectiveAssignments, rewardPoints: stats.objectiveRewards },
       houseRulesUsed: [...stats.selectedRules].sort(),
-    }));
-  }, 120_000);
+    };
+    console.info("FULL_SESSION_SIMULATION", JSON.stringify(summary));
+    if (process.env.SIMULATION_REPORT_DIR) {
+      const directory = resolve(process.env.SIMULATION_REPORT_DIR);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(resolve(directory, `balance-${sessionCount}.json`), `${JSON.stringify(summary, null, 2)}\n`);
+      const lines = [
+        `# Deterministic balance matrix: ${summary.sessions.toLocaleString()} sessions`,
+        "",
+        `Synthetic sessions covered 2–8 players and produced ${summary.uniqueLineups.toLocaleString()} distinct six-game lineups.`,
+        "",
+        `- Multi-beat appearances: ${summary.multiBeatGames.toLocaleString()} (${(summary.multiBeatGames / (summary.sessions * 6) * 100).toFixed(1)}% of game slots)`,
+        `- Lead changes: ${summary.leadChanges.toLocaleString()}`,
+        `- Sessions with a 15+ point runaway gap: ${summary.runawayGaps.toLocaleString()} (${(summary.runawayGaps / summary.sessions * 100).toFixed(1)}%)`,
+        `- Finale comeback bonus: ${summary.finaleComebacks.toLocaleString()} sessions`,
+        `- Chaos earned / spent / held: ${summary.chaos.earned.toLocaleString()} / ${summary.chaos.spent.toLocaleString()} / ${summary.chaos.heldAtFinale.toLocaleString()}`,
+        `- Chaos finale points: ${summary.chaos.finalePoints.toLocaleString()}`,
+        `- Power uses and success / miss outcomes: ${summary.powerUses.toLocaleString()} / ${summary.powerOutcomes.successes.toLocaleString()} / ${summary.powerOutcomes.misses.toLocaleString()}`,
+        `- Objectives completed: ${summary.objectives.completed.toLocaleString()} / ${summary.objectives.assigned.toLocaleString()} (${(summary.objectives.completionRate * 100).toFixed(1)}%)`,
+        `- Rule activations: ${summary.ruleActivations.toLocaleString()}; rules observed: ${summary.houseRulesUsed.join(", ")}`,
+        `- Final score range: ${summary.finalScoreRange.join("–")}`,
+        "",
+        "## Game selection counts",
+        "",
+        ...Object.entries(summary.gameAppearances).map(([game, count]) => `- ${game}: ${count.toLocaleString()} / ${(summary.sessions * 6).toLocaleString()} slots (${(count / (summary.sessions * 6) * 100).toFixed(1)}%)`),
+        "",
+        "## Score contribution by game",
+        "",
+        ...Object.entries(summary.scoreContributionsByGame).map(([game, row]) => `- ${game}: mean ${row.mean?.toFixed(2)}, median ${row.median}, negative ${(row.negativeFrequency * 100).toFixed(1)}% of player-game outcomes`),
+        "",
+        "These are descriptive outputs from a deterministic synthetic policy, not estimates of human enjoyment or statistical significance. Review game appearance by player count in the JSON output. No composite quality score is calculated.",
+        "",
+      ];
+      writeFileSync(resolve(directory, `balance-${sessionCount}.md`), `${lines.join("\n")}\n`);
+    }
+  }, 240_000);
 });
