@@ -194,6 +194,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     if (gameId === "prisoners-dilemma") return ({ Host: "COOPERATE", Alex: "DEFECT", Blair: "COOPERATE" } as Record<string, string>)[playerName];
     if (gameId === "split-the-difference") return ({ Host: "2", Alex: "2", Blair: "3" } as Record<string, string>)[playerName];
     if (gameId === "golden-ticket") return ({ Host: "BACK Alex", Alex: "BACK Alex", Blair: "BACK Host" } as Record<string, string>)[playerName];
+    if (["cross-my-heart", "signal-noise", "last-seats", "breaking-point"].includes(gameId)) return options[playerName === "Host" ? 0 : 1]?.label;
     throw new Error(`Unexpected game ${gameId}`);
   };
   const ruleByRound = ["First on the Record", "Soft Landing", "Double Down", "Bounty", "Underdog", "Double Down"];

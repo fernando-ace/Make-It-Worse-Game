@@ -34,6 +34,7 @@ test("selected Party Night two-beat game survives refresh and resolves through t
     await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
     await host.getByRole("button", { name: "Start game 1" }).click();
     await expect.poll(() => latest.get(host)?.session?.round?.minigameId).toBe(process.env.E2E_TEST_GAME_ID);
+    await expect.poll(() => latest.get(guest)?.session?.round?.minigameId).toBe(process.env.E2E_TEST_GAME_ID);
     await expect(host.getByText("BEAT 1 OF 2")).toBeVisible();
     await expect(host.getByRole("timer")).toHaveAttribute("aria-label", /seconds remaining/);
     const hostId = latest.get(host)!.me;
@@ -44,7 +45,7 @@ test("selected Party Night two-beat game survives refresh and resolves through t
     expect(latest.get(guest)?.session?.round?.myChoice).toBeNull();
     expect(latest.get(guest)?.session?.round?.beat?.publicLines).toEqual([]);
     expect(latest.get(guest)?.session?.round).not.toHaveProperty("submissions");
-    await guest.locator(".choice-button:not(:disabled)").first().click();
+    await guest.locator(".choice-button:not(:disabled)").nth(1).click();
     await expect.poll(() => latest.get(host)?.session?.round?.beat?.index).toBe(1);
     await expect(host.getByText("BEAT 2 OF 2")).toBeVisible();
     const publicLines = latest.get(guest)!.session!.round!.beat!.publicLines;
@@ -59,10 +60,20 @@ test("selected Party Night two-beat game survives refresh and resolves through t
     }
     const hostFirstChoice = latest.get(host)!.session!.round!.beat!.myFirstChoice;
     expect(hostFirstChoice).toBe(firstHostChoice);
+    const guestFirstChoice = latest.get(guest)!.session!.round!.beat!.myFirstChoice;
+    expect(guestFirstChoice).not.toBe(hostFirstChoice);
+    await guest.reload();
+    await expect.poll(() => latest.get(guest)?.session?.round?.beat?.index).toBe(1);
+    expect(latest.get(guest)?.session?.round?.myChoice).toBeNull();
+    expect(latest.get(guest)?.session?.round?.beat?.myFirstChoice).toBe(guestFirstChoice);
+    const guestSecondChoice = latest.get(guest)!.session!.round!.config.options[1].id;
+    await guest.locator(".choice-button:not(:disabled)").nth(1).click();
+    await expect.poll(() => latest.get(guest)?.session?.round?.myChoice).toBe(guestSecondChoice);
     await guest.reload();
     await expect.poll(() => latest.get(guest)?.session?.round?.beat?.index).toBe(1);
     expect(latest.get(guest)?.me).toBe(guestId);
-    expect(latest.get(guest)?.session?.round?.beat?.myFirstChoice).toBeNull();
+    expect(latest.get(guest)?.session?.round?.beat?.myFirstChoice).toBe(guestFirstChoice);
+    expect(latest.get(guest)?.session?.round?.myChoice).toBe(guestSecondChoice);
     await Promise.all([host, guest].map(async page => expect((await size(page)).scroll).toBeLessThanOrEqual((await size(page)).width)));
     await Promise.all([host, guest].map(page => page.locator(".choice-button:not(:disabled)").first().click()));
     await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
