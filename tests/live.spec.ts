@@ -310,6 +310,14 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       const playerName = latest.get(page)!.players.find((player) => player.id === latest.get(page)!.me)?.name ?? "";
       await choose(page, labelFor(gameId, playerName, options));
     }
+    if (latest.get(host)?.session?.round?.beat?.index === 1) {
+      for (const page of pages) {
+        if (latest.get(page)?.session?.phase !== "active-game" || latest.get(page)?.session?.round?.myChoice) continue;
+        const available = page.locator(".choice-button:not(:disabled)").first();
+        if (await available.count()) await available.click();
+        await expect.poll(() => latest.get(page)?.session?.round?.myChoice || latest.get(page)?.session?.phase === "game-results", { timeout: 60000 }).toBe(true);
+      }
+    }
     await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
     await finishRound("");
   }
