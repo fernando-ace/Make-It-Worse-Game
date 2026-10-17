@@ -1,24 +1,42 @@
-# Make It Worse public beta field test
+# Party Night beta field-test kit
 
-**Production:** https://make-it-worse-game.vercel.app
+Use a dedicated non-production build and Supabase project for real groups. Do not use the production URL or production data for validation. Automated CI uses a disposable local Supabase stack; human playtests still need a reachable non-production app configured against a dedicated non-production Supabase project.
 
-## Try it with a group
+## Cohorts and setup
 
-- Start with 3–6 people. One host creates a room and shares the invite link; everyone else joins from the link or six-character code.
-- Use a mix of iPhone Safari, Android Chrome, and a laptop if available. Try at least one player refreshing during a round and reconnecting.
-- Play the full six games, including House Rules, private objectives, powers, the staged finale, optional feedback, and same-room replay.
-- Have players submit feedback privately. Beta events and feedback are in `cr_private.beta_events` and `cr_private.beta_feedback` in the linked Supabase project's SQL editor; queries are in the README.
+- Run separate sessions with 2, 3–4, and 5–6 players. Try 7–8 when the group is available.
+- Mix phone and desktop players. At least one phone should be near 390 px wide and one near 430 px.
+- Ask one observer to take notes. Have each player use their own browser profile so reconnect identity remains distinct.
+- Play a complete six-game session. If time allows, ask the group to replay in the same room.
+- Ask one player to refresh or background their browser during an intro, after locking a choice, between beats, and during results.
 
-## Ask afterward
+## Observer instructions
 
-1. Which moment was the most fun, and which game was the least fun?
-2. Was anything unclear or awkward to do on your phone?
-3. Would you play another session with this group?
+Explain only the controls the UI does not make clear. Record what people do before helping.
 
-## Report a serious issue
+Note timestamps and game/phase for:
 
-Treat a session as blocked if a player cannot join or reconnect, private choices appear before reveal, a room loses committed progress, a player cannot complete a turn, or scores/finale results are wrong. Save the approximate time, device/browser, room code, and what the player was doing; do not share private answers publicly.
+- Confusion, rereading, or asking what a prompt means
+- Dead time and waiting for another player
+- Spontaneous negotiation, promises, betrayals, accusations, and targeting
+- Reactions, laughter, memorable reveals, and score explanations people question
+- Whether someone asks for a rematch without prompting
 
-## Known limits
+Do not record names, raw choices, private hints, objective text, or identifiable quotes. Use the separate human observation section in the results template and keep it separate from automated evidence and product hypotheses.
 
-Players use anonymous browser sessions rather than persistent accounts. Clearing browser storage may lose the identity used to reconnect. Automated browser testing is not a substitute for physical-device and real-group feedback.
+## Short post-game questions
+
+1. Most fun moment or game?
+2. Weakest game?
+3. What was confusing?
+4. Did House Rules change your decisions?
+5. Why did you save or spend Chaos?
+6. Did your secret objective change how you played?
+7. Would you play again immediately?
+8. What would you change first?
+
+## Report a blocker
+
+Treat a session as blocked if a player cannot join or reconnect, hidden choices appear before reveal, committed progress disappears, a player cannot complete a turn, or scores/finale results are wrong. Record app build, device/browser, approximate time, cohort size, and phase. Do not include private answers or identifiers in issue reports.
+
+Complete one [beta results template](beta-results-template.md) per session. Summarize sanitized server-derived exports locally with `npm run beta:analyze -- <sanitized-export.json>`; the analyzer rejects private feedback and unapproved fields. Automated evidence cannot answer which game was fun or whether a player intended a betrayal.

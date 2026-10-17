@@ -39,20 +39,14 @@ Feedback is stored separately in `cr_private.beta_feedback`, never returned to o
 
 The Vercel Cron Job calls `/api/cron/cleanup` daily using the production-only `CRON_SECRET`. It removes room state after 14 days without activity, telemetry after 180 days, and feedback after 365 days. Active rooms keep updating their activity timestamp; expired invite links lead back to the normal “room not available” recovery flow.
 
-For a quick beta readout, open the Supabase SQL editor for the configured project and run:
+For an approved non-production telemetry export, select only the allowlisted structured columns below and save them as JSON. Do not export `room_id` or query private feedback into the beta analyzer. The separate feedback table contains free text and needs its own access review.
 
 ```sql
-select event_name, date_trunc('day', occurred_at) as day,
-       count(*) as events, count(distinct session_key) as sessions
+select event_name, occurred_at, session_key, game_id, game_number,
+       player_count, chaos_intensity, house_rule_id, power_id, error_code
 from cr_private.beta_events
 where occurred_at >= now() - interval '30 days'
-group by 1, 2 order by 2 desc, 1;
-
-select fun_rating, play_again, favorite_game, least_favorite_game,
-       confusion, comment, created_at
-from cr_private.beta_feedback
-where created_at >= now() - interval '30 days'
-order by created_at desc;
+order by occurred_at;
 ```
 
 The event table has a fixed payload shape: `event_name`, database `occurred_at`, optional opaque `session_key`, optional `room_id` (only on room-specific records), `game_id`, `game_number`, `player_count`, `chaos_intensity`, `house_rule_id`, `power_id`, and coarse `error_code`. No player or auth identifiers, names, answers, objective text, or free-form event properties are accepted. The session key is SHA-256 of the room ID and server-only session seed. Automated live tests can also create lifecycle telemetry and should be excluded from product conclusions by their validation window.
@@ -82,7 +76,7 @@ The event table has a fixed payload shape: `event_name`, database `occurred_at`,
 | `feedback_submitted` | The server stored the member's optional feedback. |
 | `runtime_error` | The browser reported a coarse auth, network, server, or unknown error category. |
 
-The feedback query above is for authorized project operators; do not export or share free-text responses without reviewing them for identifying details.
+The telemetry query is for an authorized operator using a dedicated non-production project. No production beta data is part of this candidate's evidence.
 
 ## Running locally
 
@@ -119,6 +113,14 @@ npm test
 npm run test:simulation
 npm run build
 ```
+
+Run the larger deterministic structural balance matrix with `npm run test:balance` (10,000 sessions across 2–8 players). It reports counts from the fixed synthetic policy; it does not estimate enjoyment or human win rates.
+
+### Browser and beta evidence
+
+The GitHub Actions workflow starts an ephemeral local Supabase stack, applies the repository migrations, installs Chromium, and drives the real app/API for each two-beat game. It uses no project secrets and does not deploy. To run a single selected two-beat game locally, start local Supabase, set `E2E_TEST_MODE=1` and `E2E_TEST_GAME_ID` in the app process, and run `npm run test:party-night-e2e`. The server ignores this selector in production and reads it only from its own environment; clients cannot submit a seed or game selector.
+
+Sanitized server-derived event/metric exports can be summarized without production access using `npm run beta:analyze -- <input.json>`. The analyzer accepts only an allowlist of aggregate fields and refuses names, identifiers, private feedback, choices, tokens, or arbitrary payloads. It writes adjacent `.summary.json` and `.summary.md` files. See [the candidate report](docs/party-night-2-beta-candidate.md) and [the field-test results template](docs/beta-results-template.md).
 
 | Command | Configured script | Coverage |
 | --- | --- | --- |
