@@ -36,54 +36,9 @@ jobs:
           NEXT_PUBLIC_DEPLOYMENT_CLASS: test
           BETA_DEPLOYMENT_CLASS: test
 
-  browser-multibeat:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        game: [cross-my-heart, signal-noise, last-seats, breaking-point]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - name: Start ephemeral Supabase and apply migrations
-        run: |
-          npx supabase start --exclude studio,logflare,vector,edge-runtime,storage-api,postgres-meta,functions
-          npx supabase db reset
-          npx supabase status -o env > /tmp/supabase.env
-          set -a
-          source /tmp/supabase.env
-          set +a
-          echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY" >> "$GITHUB_ENV"
-          echo "SUPABASE_SECRET_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
-          echo "E2E_TEST_MODE=1" >> "$GITHUB_ENV"
-          echo "BETA_DEPLOYMENT_CLASS=test" >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_DEPLOYMENT_CLASS=test" >> "$GITHUB_ENV"
-          echo "E2E_TEST_GAME_ID=${{ matrix.game }}" >> "$GITHUB_ENV"
-          echo "NEXT_TELEMETRY_DISABLED=1" >> "$GITHUB_ENV"
-      - run: npm run test:party-night-e2e
-      - name: Upload browser diagnostics on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-${{ matrix.game }}
-          path: |
-            test-results/
-            playwright-report/
-          if-no-files-found: ignore
-          retention-days: 5
-      - if: always()
-        run: npx supabase stop --no-backup
-
   browser-session:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -108,6 +63,26 @@ jobs:
           echo "NEXT_TELEMETRY_DISABLED=1" >> "$GITHUB_ENV"
       - run: npm run test:live
       - run: npm run test:party
+      - name: Verify Cross My Heart privacy and reconnect
+        run: npm run test:party-night-e2e
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: cross-my-heart
+      - name: Verify Signal Noise privacy and reconnect
+        run: npm run test:party-night-e2e
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: signal-noise
+      - name: Verify Last Seats privacy and reconnect
+        run: npm run test:party-night-e2e
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: last-seats
+      - name: Verify Breaking Point privacy and reconnect
+        run: npm run test:party-night-e2e
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: breaking-point
       - name: Verify single-beat browser reconnect flow
         run: npm run test:reconnect
         env:
