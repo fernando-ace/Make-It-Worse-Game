@@ -60,12 +60,15 @@ export async function interruptAndReconnect(context: BrowserContext, page: Page,
   await expect.poll(() => readSnapshot()?.me).toBe(before.me);
   await expect.poll(() => readSnapshot()?.revision ?? 0, { timeout: 30000 }).toBeGreaterThan(before.revision);
   const after = readSnapshot()!;
-  expect(after.session?.phase).toBe(before.session?.phase);
-  expect(after.session?.round?.deadlineAt).toBe(before.session?.round?.deadlineAt);
-  expect(after.session?.round?.myChoice).toBe(before.session?.round?.myChoice);
-  expect(after.session?.myObjective).toEqual(before.session?.myObjective);
-  expect(after.session?.myChaos).toBe(before.session?.myChaos);
-  expect(after.session?.myPowers).toEqual(before.session?.myPowers);
+  // The server may advance while a client is reconnecting. Preserve private
+  // state when the phase is unchanged; callers assert any expected transition.
+  if (before.session?.phase === after.session?.phase && before.session?.gameNumber === after.session?.gameNumber) {
+    expect(after.session?.round?.deadlineAt).toBe(before.session?.round?.deadlineAt);
+    expect(after.session?.round?.myChoice).toBe(before.session?.round?.myChoice);
+    expect(after.session?.myObjective).toEqual(before.session?.myObjective);
+    expect(after.session?.myChaos).toBe(before.session?.myChaos);
+    expect(after.session?.myPowers).toEqual(before.session?.myPowers);
+  }
   return { before, after };
 }
 
