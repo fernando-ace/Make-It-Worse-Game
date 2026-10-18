@@ -286,7 +286,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       const objectiveBeforeReload = latest.get(reconnectPage)?.session?.myObjective;
       await reconnectPage.reload();
       await expect(reconnectPage.locator(".connection")).toHaveText("Connected");
-      if (round.firstCommitPlayerId) await expect(reconnectPage.locator(".active-rule")).toContainText("First on the Record");
+      if (round.firstCommitPlayerId) await expect(reconnectPage.locator(".active-rule").first()).toContainText("First on the Record");
       expect(latest.get(reconnectPage)?.session?.round?.myChoice).toBeNull();
       expect(latest.get(reconnectPage)?.session?.round).not.toHaveProperty("submissions");
       expect(latest.get(reconnectPage)?.session?.myObjective).toEqual(objectiveBeforeReload);
