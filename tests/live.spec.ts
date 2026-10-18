@@ -93,7 +93,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   contexts[guestContextIndex] = recreatedGuest.context;
   pages[1] = recreatedGuest.page;
   guestOne = recreatedGuest.page;
-  expect(latest.get(guestOne)?.me).toBe(lobbyIdentity);
+  await expect.poll(() => latest.get(guestOne)?.me).toBe(lobbyIdentity);
   const pageForName = (name: string) => pages.find((page) => {
     const snapshot = latest.get(page);
     return snapshot?.players.find((player) => player.id === snapshot.me)?.name === name;
