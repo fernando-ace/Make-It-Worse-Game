@@ -312,7 +312,7 @@ export default function ControlRoom() {
   const host = room?.hostId === room?.me;
   const session = room?.session;
   const recapKey = `${room?.id ?? ""}:${session?.phase ?? ""}:${session?.gameNumber ?? 0}`;
-  const recapStage = recapReveal.key === recapKey ? recapReveal.stage : 0;
+  const recapStage = recapReveal.key === recapKey ? recapReveal.stage : session?.objectiveReveal ? 1 : 0;
   const advanceRecap = async (stage: number) => {
     if (stage === 1 && room) {
       setBusy(true);
