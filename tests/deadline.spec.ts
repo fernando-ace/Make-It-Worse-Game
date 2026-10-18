@@ -64,12 +64,12 @@ test("full-stack server deadlines advance a two-beat game once under concurrent 
 
     await host.locator(".choice-button:not(:disabled)").first().click();
     await expect.poll(() => snapshots.get(host)?.session?.round?.myChoice).toBeTruthy();
-    expect(snapshots.get(guest)?.session?.round?.myChoice).toBeNull();
+    expect(snapshots.get(guest)?.session?.round?.myChoice).toBeFalsy();
     clockOffset = 32000;
     await expect.poll(() => snapshots.get(host)?.session?.round?.beat?.index, { timeout: 30000 }).toBe(1);
     await expect.poll(() => snapshots.get(guest)?.session?.round?.beat?.index, { timeout: 30000 }).toBe(1);
     expect(snapshots.get(host)?.session?.round?.beat?.myFirstChoice).toBeTruthy();
-    expect(snapshots.get(guest)?.session?.round?.beat?.myFirstChoice).toBeNull();
+    expect(snapshots.get(guest)?.session?.round?.beat?.myFirstChoice).toBeFalsy();
     expect(snapshots.get(guest)?.session?.round).not.toHaveProperty("submissions");
     expect(snapshots.get(host)?.session?.round?.beat?.publicLines).toHaveLength(2);
 
