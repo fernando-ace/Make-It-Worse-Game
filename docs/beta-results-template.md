@@ -6,6 +6,11 @@ Use one copy per playtest. Keep automated evidence, human observation, and produ
 
 - Date/time (local):
 - Candidate build / commit:
+- Preview deployment status / URL:
+- Verified beta project ref (safe metadata only):
+- `npm run beta -- doctor` result (deployment/backend class and permission flags only):
+- Production ref confirmed absent from Preview? yes / no:
+- Hosted workflow name / run ID / commit:
 - Test label in private notes (do not send to telemetry):
 - Approximate session time and opaque session key:
 - Cohort / player count: 2 / 3–4 / 5–6 / 7–8; exact count:

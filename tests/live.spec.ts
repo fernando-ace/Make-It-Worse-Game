@@ -67,7 +67,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     await page.getByLabel("Your name").fill(["Host", "Alex", "Blair"][index]);
   }));
   await expect(host).toHaveTitle(/Make It Worse/);
-  await expect(host.getByRole("heading", { name: /Make it worse/ })).toBeVisible();
+  await expect(host.getByRole("heading", { name: /Make it worse/i })).toBeVisible();
   await host.getByRole("button", { name: "Create game" }).click();
   await expect(host.getByRole("heading", { name: "The room is yours." })).toBeVisible();
   const code = await host.locator(".room-banner strong").innerText();

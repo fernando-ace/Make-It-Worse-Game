@@ -31,7 +31,7 @@ test("two friends complete a full mobile session without horizontal overflow", a
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
       await page.emulateMedia({ reducedMotion: "reduce" });
-      await expect(page.getByRole("heading", { name: /Know your friends/ })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /Get the group together/i })).toBeVisible();
       await expect(page.locator(".connection")).toHaveText("Connected");
       expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
     }));

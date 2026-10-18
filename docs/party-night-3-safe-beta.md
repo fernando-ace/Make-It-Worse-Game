@@ -49,16 +49,16 @@ The doctor never prints secret values. Export and cleanup require an explicitly 
 ### Automated evidence completed locally
 
 - `npm ci` passed; no dependency was added.
-- `npm run lint` and `npm run typecheck` passed before final docs review; rerun on final tree.
+- `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build` passed on the corrected implementation. `npm test` passed **151 tests across 11 files**, including environment refusal cases, API privacy behavior, and the 1,000-session deterministic simulation.
 - `npm test` passed: **151 tests across 11 files**, including environment refusal cases, API privacy behavior, and the 1,000-session deterministic simulation.
-- Simulation covered all 20 games; the previous Party Night report records 8,054 lineups and 10,000-session balance evidence. The final branch still needs a fresh `npm run test:simulation` and `npm run test:balance` run.
+- `npm run test:simulation` passed for **1,000 sessions**; all 20 games were reachable. `npm run test:balance` passed for **10,000 sessions**, covering 8,054 lineups, 50,000 rule activations, and all 20 games. No balance or gameplay math changes were made.
 - The local Supabase container startup was attempted, but the registry returned HTTP 403. No live browser test could run locally.
 
 ### Live non-production evidence
 
-**None yet.** No beta project exists, Preview is deliberately disconnected, and no real-backend multiplayer/browser evidence was produced. The GitHub workflow is configured to use an ephemeral local Supabase stack, reset migrations, and run Chromium for all four multi-beat games, three-player six-game/replay, two-player mobile, reconnect, deadline, and eight-player mobile. The final commit’s hosted workflow must be observed and its run ID, commit SHA, and job results recorded. Until then, hosted validation is pending.
+**No dedicated-beta or deployed-Preview evidence exists.** Preview is deliberately disconnected. The hosted GitHub workflow uses an ephemeral local Supabase stack, applies migrations, and runs Chromium for all four multi-beat games, three-player six-game/replay, two-player mobile, reconnect, deadline, and eight-player mobile. Run `39126434086` (`b2dbb91c158e35105f1fcee4cbb8cebd4244d5ba`) passed `validate` but its five parallel browser jobs failed: Docker Hub rate limiting and obsolete `Connected`/landing assertions. Run `39126793020` (`db796045dbbba699dfdd0b61d340d95a9047984f`) passed `validate`; the browser job reached the app and failed on a stale landing-heading assertion. The workflow was then serialized to reuse one ephemeral stack, connection status copy was clarified, and the stale landing assertions were updated. A final hosted rerun is required after these fixes.
 
-The following are explicitly outstanding against an isolated backend: full three-player session, 390px/430px two-player session, four-game private payload checks, real Realtime/reconnect, deadline/stale/idempotency, replay, eight-player room, real-state UI review, telemetry inspection/export, and analyzer processing of a real export. Synthetic analyzer fixtures, stubs, and simulations do not count as this evidence.
+The following are explicitly outstanding against an isolated beta backend and deployed Preview: full three-player session, 390px/430px two-player session, four-game private payload checks, real Realtime/reconnect, deadline/stale/idempotency, replay, eight-player room, real-state UI review, telemetry inspection/export, and analyzer processing of a real export. A successful hosted ephemeral CI run is automated full-stack evidence, not deployed-preview certification. Synthetic analyzer fixtures, stubs, and simulations do not count as live beta evidence.
 
 ### Human evidence and limitations
 
