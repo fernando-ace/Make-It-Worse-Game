@@ -4,6 +4,10 @@
 
 This is a safety and infrastructure milestone for the existing Party Night 3.0 game. It adds no game content or balance changes. The repository-side guardrails, operator commands, evidence schema, and ephemeral CI workflow are prepared. The live multiplayer certification is **blocked pending an isolated Supabase project**. The hosted Preview is intentionally disabled from Supabase so it cannot create anonymous users, rooms, telemetry, or feedback in Production.
 
+## Party Night 3.3 Local Party Lab addendum
+
+The cloud blocker remains: there is no approved isolated Supabase project, so deployed Preview remains disconnected and multiplayer-disabled. The zero-cost human-testing path is now the [Local Party Lab](party-night-3-local-party-lab.md), which starts the real local Supabase stack and the same app for phones on Fernando's LAN. It applies repository migrations, supports real anonymous Auth/RLS/RPC/Realtime, exports allowlisted evidence for `npm run beta:analyze`, and refuses production or unknown remote Supabase targets. No billing or cloud resources are created. Use the Local Party Lab handoff and physical-device checklist as the next action; hosted-preview provisioning is not required for these human sessions.
+
 The previous Vercel configuration was unsafe: both Preview and Production resolved `NEXT_PUBLIC_SUPABASE_URL` to the same Supabase project, **`jfosecuafntktpudjhyj`**. That ref is Production. No room, user, feedback, telemetry, E2E request, migration, or other beta operation was sent to it during this milestone. Production Supabase URL and key values were not changed.
 
 | Environment | Actual backend / state | Certification status |

@@ -6,13 +6,12 @@ Use one copy per playtest. Keep automated evidence, human observation, and produ
 
 - Date/time (local):
 - Candidate build / commit:
-- Preview deployment status / URL:
-- Verified beta project ref (safe metadata only):
-- `npm run beta -- doctor` result (deployment/backend class and permission flags only):
-- Production ref confirmed absent from Preview? yes / no:
-- Hosted workflow name / run ID / commit:
+- Field-test path: Local Party Lab / isolated approved beta
+- Game URL type: private LAN / approved hosted Preview (never Production):
+- `npm run party -- doctor` or `npm run beta -- doctor` safe result:
+- Hosted workflow name / run ID / commit (if relevant):
 - Test label in private notes (do not send to telemetry):
-- Approximate session time and opaque session key:
+- Approximate session time and opaque session key(s):
 - Cohort / player count: 2 / 3–4 / 5–6 / 7–8; exact count:
 - New vs returning players (counts only):
 - Devices and browsers (counts only):
@@ -20,6 +19,7 @@ Use one copy per playtest. Keep automated evidence, human observation, and produ
 - Same-room replay? yes / no / not offered
 - Approximate duration:
 - Games played (IDs or names):
+- Local manifest path (ignored/private `work/` file, if used):
 
 ## AUTOMATED EVIDENCE
 
@@ -54,6 +54,19 @@ Record phase/game and approximate elapsed time. Describe behavior without identi
 - Did secret objectives change behavior? Describe only the observed effect; do not copy objective text.
 - Did players save or spend Chaos? What did they say or do?
 - Spontaneous replay request:
+
+## PLAYER COMMENTS
+
+Keep comments short and remove names or details that identify a person. Do not copy private answers or objective text.
+
+- Favorite game/moment:
+- Weakest game/moment:
+- What was confusing:
+- House Rules changed play? How:
+- Secret objective changed behavior? How:
+- Chaos/powers understandable? What was unclear:
+- Would play again now? yes / no / unsure:
+- First change requested:
 
 ## Short post-game answers
 

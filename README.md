@@ -80,14 +80,16 @@ The telemetry query is for an authorized operator using a dedicated non-producti
 
 ## Running locally
 
-Requires Node.js 22 or newer and npm. Install local dependencies with `npm ci`; the local validation checks below do not require a Supabase project. Running the multiplayer app requires a dedicated non-production Supabase project configured as described below.
+For a free, real multiplayer session on your own Wi-Fi, use the [Local Party Lab guide](docs/party-night-3-local-party-lab.md). It starts the actual local Supabase stack and this game without copying keys or editing environment files:
 
 ```sh
 npm ci
-cp .env.example .env.local
+npm run party
 ```
 
-Set these values in `.env.local` and in the hosting environment:
+The runner prints a LAN game address to share with the group. Use `npm run party -- doctor` to check Docker, Supabase, the advertised API/Realtime address, and port availability. Use `npm run party -- --host 192.168.1.50` when you need to choose the computer's private Wi-Fi address. This is the free human-testing path; deployed Vercel Preview remains multiplayer-disabled until Fernando separately provisions isolated cloud infrastructure.
+
+For ordinary developer work with a separately approved non-production Supabase project, configure `.env.local`:
 
 | Variable | Purpose | Browser visible |
 | --- | --- | --- |
@@ -98,7 +100,7 @@ Set these values in `.env.local` and in the hosting environment:
 
 Never commit `.env.local` or expose the server key or cron secret through a `NEXT_PUBLIC_` variable. Enable Anonymous Sign-ins, apply the migrations in `supabase/migrations/`, and confirm `cr_rooms` is in the `supabase_realtime` publication. For an existing linked project, inspect its migration history before changing it.
 
-After configuring the dedicated development project, run `npm run dev` and open `http://localhost:3000`. The script runs `next dev --hostname 0.0.0.0`. To serve a local production build, run `npm run build` followed by `npm start` (`next start --hostname 0.0.0.0`).
+With that separately approved configuration, run `npm run dev` and open `http://localhost:3000`. The script runs `next dev --hostname 0.0.0.0`. To serve a local production build, run `npm run build` followed by `npm start` (`next start --hostname 0.0.0.0`).
 
 ## Validation
 
@@ -124,7 +126,7 @@ Run the larger deterministic structural balance matrix with `npm run test:balanc
 
 ### Browser and beta evidence
 
-The GitHub Actions workflow starts one ephemeral local Supabase stack, applies the repository migrations, installs Chromium, and drives the real app/API for multiplayer flows. It also runs the deterministic UX Lab browser matrix. It uses no project secrets and does not deploy. Pushes to the Party Night 3 safe-beta and player-experience branches run this workflow. To run a single selected two-beat game locally, start local Supabase, set `E2E_TEST_MODE=1` and `E2E_TEST_GAME_ID` in the app process, and run `npm run test:party-night-e2e`. The server ignores this selector in production and reads it only from its own environment; clients cannot submit a seed or game selector.
+The GitHub Actions workflow starts one ephemeral local Supabase stack, applies the repository migrations, installs Chromium, and drives the real app/API for multiplayer flows. It also runs the deterministic UX Lab browser matrix. It uses no project secrets and does not deploy. Pushes to the Party Night 3 safe-beta through Local Party Lab branches run this workflow. To run a single selected two-beat game locally, start local Supabase, set `E2E_TEST_MODE=1` and `E2E_TEST_GAME_ID` in the app process, and run `npm run test:party-night-e2e`. The server ignores this selector in production and reads it only from its own environment; clients cannot submit a seed or game selector.
 
 ### UX Lab (no Supabase)
 
