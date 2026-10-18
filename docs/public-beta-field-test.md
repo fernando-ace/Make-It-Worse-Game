@@ -9,8 +9,8 @@ Automated evidence covers the game engine, deterministic UX Lab, simulations, an
 ## Before the session
 
 1. Install dependencies once with `npm ci`; start Docker Desktop/Engine.
-2. Run `npm run party -- doctor`. If Wi-Fi detection chose the wrong adapter, use `npm run party -- doctor --host <computer-private-IPv4>` and then `npm run party -- --host <computer-private-IPv4>`.
-3. Run `npm run party`, confirm `Backend: LOCAL SUPABASE` and `Safety: PRODUCTION BLOCKED`, then share the printed URL with people on the same Wi-Fi.
+2. If the stack has already been started before, run `npm run party -- doctor`. On first setup, an unavailable local Supabase check is expected until `party` starts it. If Wi-Fi detection chose the wrong adapter, pass `--host <computer-private-IPv4>` to both commands.
+3. Run `npm run party` (or `npm run party -- --host <computer-private-IPv4>`), confirm `Backend: LOCAL SUPABASE` and `Safety: PRODUCTION BLOCKED`, then share the printed URL with people on the same Wi-Fi.
 4. Optionally run `npm run party -- reset --confirm` before a fresh test. This clears only local Supabase data and reapplies migrations.
 5. Use separate browser profiles when practical so each phone keeps its own anonymous reconnect identity. One observer should use the compact [observer card](party-night-local-observer-card.md).
 
