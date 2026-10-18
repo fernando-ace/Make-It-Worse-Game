@@ -45,7 +45,7 @@ test("eight-player targeted game remains usable on short mobile viewports with l
     await host.getByRole("button", { name: "Start game 1" }).click();
     await expect.poll(() => snapshots.get(host)?.session?.round?.minigameId).toBe("secret-handshake");
     expect(snapshots.get(host)?.players).toHaveLength(8);
-    expect(snapshots.get(host)?.session?.round?.config.options).toHaveLength(8);
+    expect(snapshots.get(host)?.session?.round?.config.options).toHaveLength(9);
 
     for (const page of pages) {
       const metrics = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));

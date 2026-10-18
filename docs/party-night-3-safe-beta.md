@@ -60,6 +60,8 @@ The doctor never prints secret values. Export and cleanup require an explicitly 
 
 Run `39129901801` (`0db93134a5d55744ef294642dd95e1d2567f3734`) passed `validate` and the complete three-player live session. The mobile suite's initial focus assertion began from an unstable browser focus state; it now focuses the first labeled input, checks its visible outline, and confirms Tab moves focus to the room code field. Later mobile, deadline, and eight-player steps still need a successful hosted rerun.
 
+Run `39130282129` (`cebb0aef3998a76ed07ce67e8977043db57a7221`) passed `validate`, the three-player session, the two-player mobile session, all four multi-beat privacy/reconnect checks, the single-beat reconnect, and deadline expiry. The eight-player targeted-game check reached the live room and found eight player targets plus a valid solo choice; its expected configuration length now includes all nine choices. Hosted rerun required.
+
 The following are explicitly outstanding against an isolated beta backend and deployed Preview: full three-player session, 390px/430px two-player session, four-game private payload checks, real Realtime/reconnect, deadline/stale/idempotency, replay, eight-player room, real-state UI review, telemetry inspection/export, and analyzer processing of a real export. A successful hosted ephemeral CI run is automated full-stack evidence, not deployed-preview certification. Synthetic analyzer fixtures, stubs, and simulations do not count as live beta evidence.
 
 ### Human evidence and limitations
