@@ -42,9 +42,11 @@ export async function reconnectByReload(page: Page, readSnapshot: () => Snapshot
   expect(after.session?.objectiveReveal).toEqual(before.session?.objectiveReveal);
   expect(after.session?.activeRules).toEqual(before.session?.activeRules);
   expect(after.session?.scores).toEqual(before.session?.scores);
-  expect(after.session).not.toHaveProperty("seed");
-  expect(after.session).not.toHaveProperty("objectives");
-  expect(after.session?.round).not.toHaveProperty("submissions");
+  if (after.session) {
+    expect(after.session).not.toHaveProperty("seed");
+    expect(after.session).not.toHaveProperty("objectives");
+    if (after.session.round) expect(after.session.round).not.toHaveProperty("submissions");
+  }
   return { before, after };
 }
 
