@@ -62,6 +62,8 @@ Run `39129901801` (`0db93134a5d55744ef294642dd95e1d2567f3734`) passed `validate`
 
 Run `39130282129` (`cebb0aef3998a76ed07ce67e8977043db57a7221`) passed `validate`, the three-player session, the two-player mobile session, all four multi-beat privacy/reconnect checks, the single-beat reconnect, and deadline expiry. The eight-player targeted-game check reached the live room and found eight player targets plus a valid solo choice; its expected configuration length now includes all nine choices. Hosted rerun required.
 
+Final hosted run `39130814413` on commit `c04a2003381253623582a1f23d9faf6acaaee5a7` passed both `validate` and `browser-session`. Browser evidence is from hosted Chromium and a per-run ephemeral local Supabase stack with repository migrations: three-player six-game session/replay, two-player 390px mobile session, Cross My Heart, Signal / Noise, Last Seats, and Breaking Point privacy/reconnect, single-beat reconnect, deadline expiry, and eight-player targeted game/390px short viewport. This is CI full-stack evidence, not a deployed-beta Preview session.
+
 The following are explicitly outstanding against an isolated beta backend and deployed Preview: full three-player session, 390px/430px two-player session, four-game private payload checks, real Realtime/reconnect, deadline/stale/idempotency, replay, eight-player room, real-state UI review, telemetry inspection/export, and analyzer processing of a real export. A successful hosted ephemeral CI run is automated full-stack evidence, not deployed-preview certification. Synthetic analyzer fixtures, stubs, and simulations do not count as live beta evidence.
 
 ### Human evidence and limitations
