@@ -50,8 +50,8 @@ test("eight-player targeted game remains usable on short mobile viewports with l
     for (const page of pages) {
       const metrics = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
       expect(metrics.scroll).toBeLessThanOrEqual(metrics.width);
-      await expect(page.locator(".player-chip:not(:disabled)")).toHaveCount(7);
-      const firstTarget = page.locator(".player-chip:not(:disabled)").first();
+      await expect(page.locator(".choice-grid .player-chip:not(:disabled)")).toHaveCount(7);
+      const firstTarget = page.locator(".choice-grid .player-chip:not(:disabled)").first();
       await firstTarget.scrollIntoViewIfNeeded();
       const rect = await firstTarget.boundingBox();
       expect(rect).toBeTruthy();
