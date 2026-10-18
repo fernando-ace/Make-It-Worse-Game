@@ -265,7 +265,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       const powerId = latest.get(host)!.session!.myPowerOffers.find((id) => !POWERS[id].targetRequired)!;
       const power = POWERS[powerId];
       await host.locator(".chaos-tools summary").click();
-      await host.locator(".power-option").filter({ hasText: power.name }).getByRole("button", { name: `Use · ${power.cost}` }).click();
+      await host.locator(".power-option").filter({ hasText: power.name }).getByRole("button", { name: `Use ${power.name} · costs ${power.cost} Chaos` }).click();
       await expect.poll(() => latest.get(host)?.session?.myChaos).toBe(2 - power.cost);
       await expect.poll(() => latest.get(host)?.session?.myPowers.length).toBe(1);
       expect(latest.get(host)?.session?.myObjective).toEqual(privateObjective);
