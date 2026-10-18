@@ -65,12 +65,28 @@ export function partyMetrics(before: Room, after: Room, action?: Action) {
     sessionCompleted: Number(final),
   };
 }
-export function recordPartyMetrics(before: Room, after: Room, action?: Action) {
+export async function recordPartyMetrics(
+  db: { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ error: unknown }> },
+  before: Room,
+  after: Room,
+  action?: Action,
+) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const metrics = partyMetrics(before, after, action);
-    if (metrics) console.info("PARTY_METRICS", JSON.stringify(metrics));
+    if (!metrics) return;
+    console.info("PARTY_METRICS", JSON.stringify(metrics));
+    await Promise.race([
+      db.rpc("cr_record_party_metric", { p_metric: { ...metrics, roomId: after.id } }),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("Party metric write timed out")), 1500);
+        timeout.unref?.();
+      }),
+    ]);
   } catch {
     // A metrics serialization or logging failure happens after the authoritative
     // room commit and must not turn a successful action into a client retry.
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }

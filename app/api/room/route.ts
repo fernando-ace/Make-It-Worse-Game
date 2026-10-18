@@ -1,4 +1,5 @@
 import { recordPartyMetrics } from "@/lib/party-metrics";
+import { getEnvironmentSafety } from "@/lib/environment-safety.mjs";
 import { NextRequest, NextResponse } from "next/server";
 import { randomInt, randomUUID } from "node:crypto";
 import { admin } from "@/lib/server";
@@ -17,6 +18,8 @@ function sessionAdvanced(before: Room["session"], after: Room["session"]) {
 }
 export async function POST(req: NextRequest) {
   try {
+    if (!getEnvironmentSafety().runtimeMutationAllowed)
+      return NextResponse.json({ error: "This deployment is not connected to an approved multiplayer backend." }, { status: 503 });
     const token = req.headers.get("authorization")?.replace(/^Bearer /, "");
     if (!token)
       return NextResponse.json(
@@ -149,7 +152,7 @@ export async function POST(req: NextRequest) {
       );
       if (commitError) throw new Error(commitError.message);
       if (committed) {
-        recordPartyMetrics(before, room, body.action);
+        await recordPartyMetrics(db, before, room, body.action);
         await recordBetaEvents(db, committedEvents(before, room, body.op, body.action, alreadyMember, uid));
         if (body.op === "leave")
           return NextResponse.json(

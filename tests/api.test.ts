@@ -4,7 +4,7 @@ import type { Room, Snapshot } from "../lib/types";
 import { MINIGAMES } from "../lib/games";
 import { POWERS } from "../lib/powers";
 
-const store = vi.hoisted(() => ({ rooms: new Map<string, Room>(), conflicts: 0, betaEvents: [] as Record<string, unknown>[], feedback: [] as Record<string, unknown>[], failTelemetry: false, failFeedback: false }));
+const store = vi.hoisted(() => ({ rooms: new Map<string, Room>(), conflicts: 0, betaEvents: [] as Record<string, unknown>[], metrics: [] as Record<string, unknown>[], feedback: [] as Record<string, unknown>[], failTelemetry: false, failFeedback: false }));
 vi.mock("../lib/server", () => ({
   admin: () => ({
     auth: { getUser: async (token: string) => ({ data: { user: /^(c|p|x|u\d+)$/.test(token) ? { id: token } : null }, error: null }) },
@@ -19,6 +19,7 @@ vi.mock("../lib/server", () => ({
         return { data: true, error: null };
       }
       if (name === "cr_record_beta_events") { if (store.failTelemetry) throw new Error("synthetic telemetry outage"); store.betaEvents.push(...(args.p_events as Record<string, unknown>[])); return { data: (args.p_events as unknown[]).length, error: null }; }
+      if (name === "cr_record_party_metric") { store.metrics.push(args.p_metric as Record<string, unknown>); return { data: null, error: null }; }
       if (name === "cr_submit_beta_feedback") {
         if (store.failFeedback) throw new Error("synthetic feedback storage outage");
         if (store.feedback.some((row) => row.p_session_key === args.p_session_key && row.p_respondent_key === args.p_respondent_key)) return { data: false, error: null };
@@ -32,6 +33,7 @@ vi.mock("../lib/server", () => ({
 import { POST } from "../app/api/room/route";
 import { POST as postBetaEvent } from "../app/api/beta/route";
 import { POST as postFeedback } from "../app/api/feedback/route";
+import { GET as getCleanup } from "../app/api/cron/cleanup/route";
 let sequence = 0;
 async function request(uid: string, body: Record<string, unknown>, extraHeaders: Record<string, string> = {}) {
   const response = await POST(new NextRequest("http://localhost/api/room", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${uid}`, ...extraHeaders }, body: JSON.stringify({ actionId: `party-test-${++sequence}`, ...body }) }));
@@ -39,9 +41,69 @@ async function request(uid: string, body: Record<string, unknown>, extraHeaders:
 }
 async function create() { return (await request("c", { op: "create", name: "Host" })).data as Snapshot; }
 
-beforeEach(() => { vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret-key"); store.rooms.clear(); store.conflicts = 0; store.betaEvents.length = 0; store.feedback.length = 0; store.failTelemetry = false; store.failFeedback = false; });
+beforeEach(() => {
+  vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret-key");
+  vi.stubEnv("VERCEL_ENV", "");
+  vi.stubEnv("BETA_DEPLOYMENT_CLASS", "test");
+  vi.stubEnv("NEXT_PUBLIC_DEPLOYMENT_CLASS", "test");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://makeitworsetest123456.supabase.co");
+  vi.stubEnv("TEST_SUPABASE_PROJECT_REF", "makeitworsetest123456");
+  vi.stubEnv("BETA_SUPABASE_PROJECT_REF", "");
+  store.rooms.clear(); store.conflicts = 0; store.betaEvents.length = 0; store.metrics.length = 0;
+  store.feedback.length = 0; store.failTelemetry = false; store.failFeedback = false;
+});
 
 describe("authenticated party room API", () => {
+  it("refuses Preview writes when its Supabase URL resolves to Production", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOYMENT_CLASS", "preview");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://jfosecuafntktpudjhyj.supabase.co");
+    vi.stubEnv("BETA_SUPABASE_PROJECT_REF", "makeitworsebeta123456");
+    const result = await request("c", { op: "create", name: "Host" });
+    expect(result.status).toBe(503);
+    expect(store.rooms.size).toBe(0);
+  });
+
+  it("blocks beta telemetry, feedback, and maintenance on a Production-backed Preview", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOYMENT_CLASS", "preview");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://jfosecuafntktpudjhyj.supabase.co");
+    vi.stubEnv("BETA_SUPABASE_PROJECT_REF", "makeitworsebeta123456");
+    const headers = { "Content-Type": "application/json", Authorization: "Bearer c" };
+    const telemetry = await postBetaEvent(new NextRequest("http://localhost/api/beta", { method: "POST", headers, body: JSON.stringify({ name: "landing_viewed" }) }));
+    const feedback = await postFeedback(new NextRequest("http://localhost/api/feedback", { method: "POST", headers, body: JSON.stringify({}) }));
+    vi.stubEnv("CRON_SECRET", "cron-test");
+    const cleanup = await getCleanup(new NextRequest("http://localhost/api/cron/cleanup", { headers: { Authorization: "Bearer cron-test" } }));
+    expect(telemetry.status).toBe(503);
+    expect(feedback.status).toBe(503);
+    expect(cleanup.status).toBe(503);
+    expect(store.betaEvents).toHaveLength(0);
+    expect(store.feedback).toHaveLength(0);
+  });
+
+  it("records only server-derived structured party metrics", async () => {
+    const room = await create();
+    await request("p", { op: "join", code: room.code, name: "Friend" });
+    await request("c", { op: "action", code: room.code, action: { type: "start" } });
+    const started = store.rooms.get(room.code)!;
+    started.session!.gameSlots[0] = "split-decision";
+    started.session!.gameConfig = MINIGAMES["split-decision"].config({ players: started.players, gameNumber: 1 });
+    store.rooms.set(room.code, started);
+    await request("c", { op: "action", code: room.code, action: { type: "begin-game" } });
+    const current = store.rooms.get(room.code)!;
+    const definition = MINIGAMES["split-decision"];
+    const pick = (id: string) => current.session!.round!.config.options.find((option) => definition.validate(option.id, { players: current.players, playerId: id, config: current.session!.round!.config }))!.id;
+    await request("c", { op: "action", code: room.code, action: { type: "submit", value: pick("c") } });
+    await request("p", { op: "action", code: room.code, action: { type: "submit", value: pick("p") } });
+    expect(store.metrics.length).toBeGreaterThan(0);
+    const row = store.metrics.at(-1)!;
+    expect(row).toMatchObject({ gameId: "split-decision", playerCount: 2, completed: 1, roomId: expect.any(String) });
+    expect(row).not.toHaveProperty("name");
+    expect(row).not.toHaveProperty("objectiveText");
+    expect(row).not.toHaveProperty("privateHint");
+    expect(row).not.toHaveProperty("answer");
+  });
+
   it("keeps a running room playable when beta telemetry storage is unavailable", async () => {
     const room = await create();
     await request("p", { op: "join", code: room.code, name: "Friend" });
@@ -245,6 +307,9 @@ describe("authenticated party room API", () => {
     const priorNodeEnv = process.env.NODE_ENV ?? "test";
     const priorE2e = process.env.E2E_TEST_MODE;
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOYMENT_CLASS", "production");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://jfosecuafntktpudjhyj.supabase.co");
     vi.stubEnv("E2E_TEST_MODE", "1");
     try {
       const sync = await request("p", { op: "action", code: host.code, action: { type: "sync" } }, { "x-e2e-clock-offset-ms": "300000" });
@@ -253,6 +318,7 @@ describe("authenticated party room API", () => {
     } finally {
       vi.stubEnv("NODE_ENV", priorNodeEnv);
       vi.stubEnv("E2E_TEST_MODE", priorE2e ?? "");
+      vi.stubEnv("VERCEL_ENV", "");
     }
   });
 

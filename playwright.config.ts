@@ -1,4 +1,14 @@
 import { defineConfig } from "@playwright/test";
+import { getEnvironmentSafety } from "./lib/environment-safety.mjs";
+
+if (!process.env.VERCEL_ENV) {
+  process.env.BETA_DEPLOYMENT_CLASS ??= "test";
+  process.env.NEXT_PUBLIC_DEPLOYMENT_CLASS ??= "test";
+}
+if (process.env.NEXT_PUBLIC_SUPABASE_URL && !getEnvironmentSafety().browserTestAllowed) {
+  throw new Error("Playwright refused an unapproved or production Supabase project.");
+}
+
 export default defineConfig({
   testDir: "tests",
   testMatch: ["live.spec.ts", "party.spec.ts", "multibeat.spec.ts", "reconnect.spec.ts", "deadline.spec.ts", "mobile-edge.spec.ts"],

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { admin } from "@/lib/server";
 import { BETA_EVENT_NAMES, betaSessionKey, recordBetaEvents, type BetaEvent } from "@/lib/beta";
 import type { Room } from "@/lib/types";
+import { getEnvironmentSafety } from "@/lib/environment-safety.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,8 @@ const clientEvents = new Set([
 
 export async function POST(req: NextRequest) {
   try {
+    if (!getEnvironmentSafety().runtimeMutationAllowed)
+      return NextResponse.json({ error: "This deployment is not connected to an approved telemetry backend." }, { status: 503 });
     const token = req.headers.get("authorization")?.replace(/^Bearer /, "");
     if (!token) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
     const db = admin();

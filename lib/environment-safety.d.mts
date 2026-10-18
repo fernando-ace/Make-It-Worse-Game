@@ -1,0 +1,21 @@
+export type DeploymentClass = "production" | "preview" | "development" | "test" | "unknown";
+export type BackendClass = "production" | "beta" | "test" | "local" | "unknown";
+export type EnvironmentSafety = Readonly<{
+  deploymentClass: DeploymentClass;
+  projectRef: string | null;
+  backendClass: BackendClass;
+  isProductionBackend: boolean;
+  isBetaBackend: boolean;
+  runtimeMutationAllowed: boolean;
+  browserTestAllowed: boolean;
+  betaOperatorAllowed: boolean;
+  betaExportAllowed: boolean;
+  betaCleanupAllowed: boolean;
+  configurationMismatch: boolean;
+}>;
+export declare const PRODUCTION_SUPABASE_PROJECT_REF: string;
+export declare function supabaseProjectRefFromUrl(value: unknown): string | null;
+export declare function getEnvironmentSafety(env?: Record<string, string | undefined>): EnvironmentSafety;
+export declare function assertRuntimeMutationAllowed(env?: Record<string, string | undefined>): EnvironmentSafety;
+export declare function assertBetaOperatorAllowed(env?: Record<string, string | undefined>, operation?: string): EnvironmentSafety;
+export declare function browserEnvironment(): Record<string, string | undefined>;
