@@ -24,6 +24,23 @@ Note timestamps and game/phase for:
 
 Do not record names, raw choices, private hints, objective text, or identifiable quotes. Use the separate human observation section in the results template and keep it separate from automated evidence and product hypotheses.
 
+### Party Night 3.0 social UX observations
+
+Let players discover the controls without a walkthrough. For each phase, note where they pause, reread, or ask for help, and whether they look up from the phone to talk.
+
+- Landing: do players understand Create game, Join game, invite links, and room codes without coaching?
+- Lobby: can the host tell what blocks starting, and can players spot who is present and who is hosting?
+- Decisions: do players understand the prompt and choices, then lock in without reading secondary panels?
+- Multi-beat games: do players distinguish public information from their private report, and talk during the transition?
+- Waiting: does the aggregate lock count explain what is happening without calling out a specific person?
+- Chaos, powers, and objectives: can players find their balance, inspect a power's cost and target, and check their private goal when needed?
+- House Rules: can a winner explain what their rule changes and when it starts? Do later reminders help without prompting?
+- Results: do players understand who gained points and why? Record reactions to reveals, targeting, betrayals, and score swings.
+- Finale: are objective and award reveals clear, does the recap recall a real moment from this session, and is replay easy to find?
+- Recovery: after a brief offline period or refresh, can players tell they reconnected and returned to the same phase?
+
+Record the device width and height, whether the keyboard was open, where scrolling occurred, and whether the primary action stayed reachable. Do not record names, raw choices, private hints, objective text, or identifiable quotes.
+
 ## Short post-game questions
 
 1. Most fun moment or game?

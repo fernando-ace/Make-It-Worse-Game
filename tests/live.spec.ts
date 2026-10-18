@@ -68,7 +68,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   }));
   await expect(host).toHaveTitle(/Make It Worse/);
   await expect(host.getByRole("heading", { name: /Make it worse/ })).toBeVisible();
-  await host.getByRole("button", { name: "Create a room" }).click();
+  await host.getByRole("button", { name: "Create game" }).click();
   await expect(host.getByRole("heading", { name: "The room is yours." })).toBeVisible();
   const code = await host.locator(".room-banner strong").innerText();
   const originalHostId = latest.get(host)!.me;
@@ -77,7 +77,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
   rooms.push({ id: latest.get(host)!.id, code });
   for (const [page, playerName] of [[guestOne, "Alex"], [guestTwo, "Blair"]] as const) {
     await page.getByLabel("Room code").fill(code);
-    await page.getByRole("button", { name: "Join the party" }).click();
+    await page.getByRole("button", { name: "Join game" }).click();
     await expect(page.locator(".player-row").filter({ hasText: playerName })).toBeVisible();
   }
   await expect(host.locator(".player-row")).toHaveCount(3);
@@ -252,12 +252,14 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     if (number === 4) {
       const activeIds = latest.get(host)!.session!.activeRules.map((rule) => rule.id);
       expect(activeIds.length).toBeGreaterThanOrEqual(2);
-      await expect(host.locator(".active-rule")).toHaveCount(activeIds.length);
+      await host.locator(".decision-extra summary").click();
+      await expect(host.locator(".decision-extra .active-rule")).toHaveCount(activeIds.length);
     }
     if (number === 1) {
       const privateObjective = latest.get(host)!.session!.myObjective;
       const powerId = latest.get(host)!.session!.myPowerOffers.find((id) => !POWERS[id].targetRequired)!;
       const power = POWERS[powerId];
+      await host.locator(".chaos-tools summary").click();
       await host.locator(".power-option").filter({ hasText: power.name }).getByRole("button", { name: `Use · ${power.cost}` }).click();
       await expect.poll(() => latest.get(host)?.session?.myChaos).toBe(2 - power.cost);
       await expect.poll(() => latest.get(host)?.session?.myPowers.length).toBe(1);

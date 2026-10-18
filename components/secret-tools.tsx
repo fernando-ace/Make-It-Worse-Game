@@ -20,10 +20,14 @@ export function ObjectiveCard({ snapshot }: { snapshot: Snapshot }) {
     previous.current = { id: objectiveId, progress };
   }, [objectiveId, progress, completed, reward]);
   if (!objective || snapshot.session?.phase === "final-results") return null;
-  return <section className="secret-objective" aria-label="Your secret objective">
-    <div><span>YOUR SECRET OBJECTIVE · PRIVATE</span><strong>{objective.title}</strong><p>{objective.description}</p>{feedback && <small className="objective-feedback" aria-live="polite">{feedback}</small>}</div>
-    <div className="objective-meter"><b>{objective.progress}/{objective.target}</b><i><span style={{ width: `${Math.min(100, objective.progress / objective.target * 100)}%` }}/></i></div>
-  </section>;
+  return <details className="secret-objective">
+    <summary aria-label={`Your private objective: ${objective.title}, progress ${objective.progress} of ${objective.target}`}>
+      <div><span>YOUR OBJECTIVE · PRIVATE</span><strong>{objective.title}</strong></div>
+      <div className="objective-meter"><b>{objective.progress}/{objective.target}</b><i><span style={{ width: `${Math.min(100, objective.progress / objective.target * 100)}%` }}/></i></div>
+    </summary>
+    {feedback && <small className="objective-feedback objective-feedback-live" role="status" aria-live="polite">{feedback}</small>}
+    <div className="objective-detail"><p>{objective.description}</p></div>
+  </details>;
 }
 
 export function PowerControls({ snapshot, busy, committed, onAction }: { snapshot: Snapshot; busy: boolean; committed: boolean; onAction: (action: Action) => void }) {
@@ -34,8 +38,9 @@ export function PowerControls({ snapshot, busy, committed, onAction }: { snapsho
   const otherPlayers = snapshot.players.filter((player) => player.id !== snapshot.me);
   const selectedTarget = otherPlayers.some((player) => player.id === targetId) ? targetId : otherPlayers[0]?.id ?? "";
   const availablePowers = POWER_LIST.filter((power) => session.myPowerOffers.includes(power.id) && (!committed || power.targetableAfterCommit));
-  return <section className="chaos-tools" aria-label="Spend Chaos">
-    <div className="chaos-tools-heading"><strong>Chaos {session.myChaos}</strong><span>One power per game · save 3 Chaos for +1 at finale (cap +2)</span></div>
+  return <details className="chaos-tools" open={used || Boolean(session.myIntel)}>
+    <summary className="chaos-tools-heading"><span><strong>CHAOS WALLET · {session.myChaos}</strong><small>{used ? "Power played this game" : `${availablePowers.length} power${availablePowers.length === 1 ? "" : "s"} to inspect`}</small></span><span className="wallet-action">{used ? "View details" : "Open powers"}</span></summary>
+    <p className="wallet-note">One power per game. Save 3 Chaos for +1 at the finale (max +2).</p>
     <div className="power-list">{availablePowers.map((power) => <div className="power-option" key={power.id}>
       <div><strong>{power.name}</strong><p>{power.description}</p></div>
       {power.targetRequired && <label className="power-target">{power.name === "Read Receipt" ? "Scout" : "Mark"} <select aria-label={`${power.name} target`} value={selectedTarget} onChange={(event) => setTargetId(event.target.value)}>{otherPlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
@@ -43,7 +48,7 @@ export function PowerControls({ snapshot, busy, committed, onAction }: { snapsho
     </div>)}</div>
     {used && <small className="power-armed">Your power is armed for this game. Only you can see it until the reveal.</small>}
     {session.myIntel && <small className="power-armed private-intel">Private intel · {session.myIntel.playerName} locked “{session.round?.config.options.find((option) => option.id === session.myIntel?.choice)?.label ?? "a choice"}”.</small>}
-  </section>;
+  </details>;
 }
 
 export function ObjectiveReveal({ snapshot }: { snapshot: Snapshot }) {

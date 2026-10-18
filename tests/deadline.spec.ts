@@ -49,13 +49,13 @@ test("full-stack server deadlines advance a two-beat game once under concurrent 
       await expect(page.locator(".connection")).toHaveText("Connected");
     }));
     await host.getByLabel("Your name").fill("Deadline Host");
-    await host.getByRole("button", { name: "Create a room" }).click();
+    await host.getByRole("button", { name: "Create game" }).click();
     await expect(host.getByRole("heading", { name: "The room is yours." })).toBeVisible();
     const code = await host.locator(".room-banner strong").innerText();
     room = { id: snapshots.get(host)!.id, code };
     await guest.getByLabel("Your name").fill("Deadline Guest");
     await guest.getByLabel("Room code").fill(code);
-    await guest.getByRole("button", { name: "Join the party" }).click();
+    await guest.getByRole("button", { name: "Join game" }).click();
     await expect(host.locator(".player-row")).toHaveCount(2);
     await host.getByRole("button", { name: "Start the party" }).click();
     await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();

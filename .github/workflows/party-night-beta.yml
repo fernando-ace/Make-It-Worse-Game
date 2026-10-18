@@ -5,6 +5,7 @@ on:
     branches:
       - feat/party-night-2-beta-candidate
       - feat/party-night-2-field-test-release
+      - feat/party-night-3-social-ux
   pull_request:
     branches: [master]
 

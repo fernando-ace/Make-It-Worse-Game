@@ -30,14 +30,14 @@ test("eight-player targeted game remains usable on short mobile viewports with l
       await expect(page.locator(".connection")).toHaveText("Connected");
     }));
     await host.getByLabel("Your name").fill("Player 1 With Long Name");
-    await host.getByRole("button", { name: "Create a room" }).click();
+    await host.getByRole("button", { name: "Create game" }).click();
     await expect(host.getByRole("heading", { name: "The room is yours." })).toBeVisible();
     const code = await host.locator(".room-banner strong").innerText();
     room = { id: snapshots.get(host)!.id, code };
     for (const [index, guest] of guests.entries()) {
       await guest.getByLabel("Your name").fill(`Player ${index + 2} With Long Name`);
       await guest.getByLabel("Room code").fill(code);
-      await guest.getByRole("button", { name: "Join the party" }).click();
+      await guest.getByRole("button", { name: "Join game" }).click();
     }
     await expect(host.locator(".player-row")).toHaveCount(8);
     await host.getByRole("button", { name: "Start the party" }).click();

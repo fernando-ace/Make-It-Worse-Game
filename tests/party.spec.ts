@@ -38,13 +38,13 @@ test("two friends complete a full mobile session without horizontal overflow", a
     await host.keyboard.press("Tab");
     expect(await host.evaluate(() => getComputedStyle(document.activeElement!).outlineWidth)).not.toBe("0px");
     await host.getByLabel("Your name").fill("Host With A Very Long");
-    await host.getByRole("button", { name: "Create a room" }).click();
+    await host.getByRole("button", { name: "Create game" }).click();
     await expect(host.getByRole("heading", { name: "The room is yours." })).toBeVisible();
     const code = await host.locator(".room-banner strong").innerText();
     roomCode = code;
     await guest.getByLabel("Your name").fill("Guest With A Very Long");
     await guest.getByLabel("Room code").fill(code);
-    await guest.getByRole("button", { name: "Join the party" }).click();
+    await guest.getByRole("button", { name: "Join game" }).click();
     await expect(guest.getByText("Guest With A Very Long", { exact: false })).toBeVisible();
     await expect(host.locator(".player-row")).toHaveCount(2);
     await host.getByLabel("Chaos intensity").selectOption("high");

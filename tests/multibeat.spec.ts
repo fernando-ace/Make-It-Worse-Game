@@ -25,12 +25,12 @@ test("selected Party Night two-beat game survives refresh and resolves through t
       await expect(page.locator(".connection")).toHaveText("Connected");
     }));
     await host.getByLabel("Your name").fill("Host test");
-    await host.getByRole("button", { name: "Create a room" }).click();
+    await host.getByRole("button", { name: "Create game" }).click();
     await expect(host.getByRole("heading", { name: "The room is yours." })).toBeVisible();
     code = await host.locator(".room-banner strong").innerText();
     await guest.getByLabel("Your name").fill("Guest test");
     await guest.getByLabel("Room code").fill(code);
-    await guest.getByRole("button", { name: "Join the party" }).click();
+    await guest.getByRole("button", { name: "Join game" }).click();
     await expect(host.locator(".player-row")).toHaveCount(2);
     await host.getByRole("button", { name: "Start the party" }).click();
     await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
