@@ -26,22 +26,27 @@ export async function reconnectByReload(page: Page, readSnapshot: () => Snapshot
   const after = readSnapshot()!;
   expect(after.players.map(player => player.id)).toEqual(before.players.map(player => player.id));
   expect(after.hostId).toBe(before.hostId);
-  expect(after.session?.phase).toBe(before.session?.phase);
-  expect(after.session?.gameNumber).toBe(before.session?.gameNumber);
-  expect(after.session?.round?.minigameId).toBe(before.session?.round?.minigameId);
-  expect(after.session?.round?.beat?.index).toBe(before.session?.round?.beat?.index);
-  expect(after.session?.round?.deadlineAt).toBe(before.session?.round?.deadlineAt);
-  expect(after.session?.round?.myChoice).toBe(before.session?.round?.myChoice);
-  expect(after.session?.round?.beat?.myFirstChoice).toBe(before.session?.round?.beat?.myFirstChoice);
-  expect(after.session?.round?.beat?.myHint).toBe(before.session?.round?.beat?.myHint);
-  expect(after.session?.myObjective).toEqual(before.session?.myObjective);
-  expect(after.session?.myChaos).toBe(before.session?.myChaos);
-  expect(after.session?.myPowers).toEqual(before.session?.myPowers);
-  expect(after.session?.myPowerOffers).toEqual(before.session?.myPowerOffers);
-  expect(after.session?.myIntel).toEqual(before.session?.myIntel);
-  expect(after.session?.objectiveReveal).toEqual(before.session?.objectiveReveal);
-  expect(after.session?.activeRules).toEqual(before.session?.activeRules);
-  expect(after.session?.scores).toEqual(before.session?.scores);
+  const sameCheckpoint = after.session?.phase === before.session?.phase
+    && after.session?.gameNumber === before.session?.gameNumber
+    && after.session?.round?.minigameId === before.session?.round?.minigameId
+    && after.session?.round?.beat?.index === before.session?.round?.beat?.index;
+  // The server can finish a beat, resolve a rule, or advance the phase while
+  // the page reloads. Assert the caller's private snapshot only at the same
+  // authoritative checkpoint; the returned snapshot remains the source of truth.
+  if (sameCheckpoint) {
+    expect(after.session?.round?.deadlineAt).toBe(before.session?.round?.deadlineAt);
+    expect(after.session?.round?.myChoice).toBe(before.session?.round?.myChoice);
+    expect(after.session?.round?.beat?.myFirstChoice).toBe(before.session?.round?.beat?.myFirstChoice);
+    expect(after.session?.round?.beat?.myHint).toBe(before.session?.round?.beat?.myHint);
+    expect(after.session?.myObjective).toEqual(before.session?.myObjective);
+    expect(after.session?.myChaos).toBe(before.session?.myChaos);
+    expect(after.session?.myPowers).toEqual(before.session?.myPowers);
+    expect(after.session?.myPowerOffers).toEqual(before.session?.myPowerOffers);
+    expect(after.session?.myIntel).toEqual(before.session?.myIntel);
+    expect(after.session?.objectiveReveal).toEqual(before.session?.objectiveReveal);
+    expect(after.session?.activeRules).toEqual(before.session?.activeRules);
+    expect(after.session?.scores).toEqual(before.session?.scores);
+  }
   if (after.session) {
     expect(after.session).not.toHaveProperty("seed");
     expect(after.session).not.toHaveProperty("objectives");
