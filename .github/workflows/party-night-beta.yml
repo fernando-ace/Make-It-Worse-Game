@@ -6,6 +6,7 @@ on:
       - feat/party-night-2-beta-candidate
       - feat/party-night-2-field-test-release
       - feat/party-night-3-social-ux
+      - feat/party-night-3-safe-beta
   pull_request:
     branches: [master]
 
@@ -32,6 +33,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: local-build-placeholder
           SUPABASE_SECRET_KEY: local-build-placeholder
+          NEXT_PUBLIC_DEPLOYMENT_CLASS: test
+          BETA_DEPLOYMENT_CLASS: test
 
   browser-multibeat:
     runs-on: ubuntu-latest
@@ -60,6 +63,8 @@ jobs:
           echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY" >> "$GITHUB_ENV"
           echo "SUPABASE_SECRET_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
           echo "E2E_TEST_MODE=1" >> "$GITHUB_ENV"
+          echo "BETA_DEPLOYMENT_CLASS=test" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_DEPLOYMENT_CLASS=test" >> "$GITHUB_ENV"
           echo "E2E_TEST_GAME_ID=${{ matrix.game }}" >> "$GITHUB_ENV"
           echo "NEXT_TELEMETRY_DISABLED=1" >> "$GITHUB_ENV"
       - run: npm run test:party-night-e2e
@@ -98,6 +103,8 @@ jobs:
           echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY" >> "$GITHUB_ENV"
           echo "SUPABASE_SECRET_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+          echo "BETA_DEPLOYMENT_CLASS=test" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_DEPLOYMENT_CLASS=test" >> "$GITHUB_ENV"
           echo "NEXT_TELEMETRY_DISABLED=1" >> "$GITHUB_ENV"
       - run: npm run test:live
       - run: npm run test:party

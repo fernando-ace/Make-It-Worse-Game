@@ -2,6 +2,31 @@
 
 Use a dedicated non-production build and Supabase project for real groups. Do not use the production URL or production data for validation. Automated CI uses a disposable local Supabase stack; human playtests still need a reachable non-production app configured against a dedicated non-production Supabase project.
 
+## Before
+
+1. Open the approved Party Night beta Preview URL.
+2. Run `npm run beta -- doctor` using the approved beta environment. Confirm `deploymentClass` is `preview`, `backendClass` is `beta`, the printed project ref matches the approved beta ref, and production/beta safety is clear. Doctor output contains no secrets.
+3. Confirm the Vercel Preview deployment is `READY` and its Supabase URL resolves to that beta ref. If the doctor is unknown, denied, or shows the Production ref, stop without opening the game.
+4. Share the invite link/code. Ask each player to use their own browser profile.
+
+## During
+
+Record only:
+
+- Player count, device/browser mix, approximate session time, and opaque session reference
+- Confusion, laughter, negotiation, betrayal, waiting/dead time, and memorable reveals
+- Create/join, lock/wait, reconnect, or layout problems and the phase where they occurred
+
+Do not write names, room codes, raw private answers, objective text, hints, tokens, or contact details. Use approximate elapsed time and game/phase for notes. Avoid identifiable quotes.
+
+## After
+
+1. Ask the short player feedback questions below and complete one results template.
+2. Export with `npm run beta -- export --since <ISO-date> --out work/beta-evidence.json`.
+3. Run `npm run beta:analyze -- work/beta-evidence.json` and note the sample sizes and limitations.
+4. Keep AUTOMATED EVIDENCE, HUMAN OBSERVATION, and PRODUCT HYPOTHESIS separate. Do not infer enjoyment from simulation or telemetry counts.
+5. If the test room is disposable, remove only that room with `npm run beta -- cleanup --room-id <uuid> --room-code <code> --confirm`. Doctor and cleanup must continue to refuse Production.
+
 ## Cohorts and setup
 
 - Run separate sessions with 2, 3–4, and 5–6 players. Try 7–8 when the group is available.
@@ -57,12 +82,3 @@ Record the device width and height, whether the keyboard was open, where scrolli
 Treat a session as blocked if a player cannot join or reconnect, hidden choices appear before reveal, committed progress disappears, a player cannot complete a turn, or scores/finale results are wrong. Record app build, device/browser, approximate time, cohort size, and phase. Do not include private answers or identifiers in issue reports.
 
 Complete one [beta results template](beta-results-template.md) per session. Summarize sanitized server-derived exports locally with `npm run beta:analyze -- <sanitized-export.json>`; the analyzer rejects private feedback and unapproved fields. Automated evidence cannot answer which game was fun or whether a player intended a betrayal.
-
-## Field test checklist
-
-1. Use the approved non-production build; confirm each player has a separate browser profile.
-2. Note the build, approximate start time, opaque session key, player count, and device/browser mix.
-3. Play through the finale. Observe confusion, waiting, negotiation, reactions, and requests to replay without coaching the group.
-4. If someone refreshes or briefly loses network, confirm they return to the same player and phase. Record any lost choice or unexpected private information as a blocker.
-5. Ask the short post-game questions and complete one results template. Keep observations separate from hypotheses.
-6. Export only approved sanitized evidence. Keep the key/time cross-reference and raw notes private; never attach participant identity or private answers.

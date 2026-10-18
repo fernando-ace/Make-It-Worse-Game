@@ -102,6 +102,12 @@ After configuring the dedicated development project, run `npm run dev` and open 
 
 ## Validation
 
+### Party Night 3.1 safe beta
+
+Run `npm run beta` before operating on beta data. It reports only deployment class, Supabase project ref, and permission flags. Preview and operator actions are blocked unless the backend is explicitly classified as beta; the known production ref is always refused by beta export and cleanup. Read [the safe beta certification record](docs/party-night-3-safe-beta.md) before configuring hosted environments. The current Vercel Preview is intentionally disconnected because this Supabase account has no available zero-cost dedicated project slot. Do not restore a Supabase URL or key to Preview until a dedicated beta project is provisioned and its ref verified.
+
+After configuring that project, apply migrations with the documented Supabase CLI workflow and set the exact beta project ref in both public/server environment markers. `npm run beta -- doctor` checks the resulting classification. `npm run beta -- export` writes allowlisted evidence under `work/`; `npm run beta -- cleanup --room-id <uuid> --room-code <code> --confirm` deletes only that exact room and its beta evidence. Both tools fail closed against Production. See the field checklist for the human session workflow.
+
 ### Local checks (no Supabase or browser required)
 
 After `npm ci`, run the configured checks from the repository root:
