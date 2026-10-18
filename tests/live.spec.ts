@@ -306,6 +306,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     await expect.poll(() => latest.get(host)?.session?.phase, { timeout: 60000 }).toBe("game-results");
     await finishRound(ruleByRound[number - 1]);
     if (number === 1) {
+      await expect.poll(() => latest.get(guestOne)?.session?.phase).toBe("intermission");
       const intermission = latest.get(guestOne)!;
       const restored = await reconnectByReload(guestOne, () => latest.get(guestOne));
       expect(restored.before.session?.phase).toBe("intermission");
