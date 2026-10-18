@@ -195,12 +195,14 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
 
   await host.getByRole("button", { name: "Start the party" }).click();
   await expect(host.getByRole("button", { name: "Start game 1" })).toBeVisible();
-  await expect.poll(() => latest.get(host)?.session).not.toBeNull();
-  const intro = latest.get(guestOne)!;
+  await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-intro");
+  const expectedGameNumber = latest.get(host)!.session!.gameNumber;
+  await expect.poll(() => latest.get(guestOne)?.session?.phase).toBe("game-intro");
+  const guestIdentity = latest.get(guestOne)!.me;
   const outage = await interruptAndReconnect(guestOne.context(), guestOne, () => latest.get(guestOne));
-  expect(outage.before.me).toBe(intro.me);
+  expect(outage.before.me).toBe(guestIdentity);
   expect(outage.after.session?.phase).toBe("game-intro");
-  expect(outage.after.session?.gameNumber).toBe(intro.session?.gameNumber);
+  expect(outage.after.session?.gameNumber).toBe(expectedGameNumber);
   const selectedGames = latest.get(host)!.session!.gameSlots;
   expect(selectedGames).toHaveLength(6);
   expect(new Set(selectedGames).size).toBe(6);
