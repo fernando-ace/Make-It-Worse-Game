@@ -17,6 +17,7 @@
     "test:reconnect": "playwright test tests/reconnect.spec.ts",
     "test:deadline": "playwright test tests/deadline.spec.ts",
     "test:mobile-edge": "playwright test tests/mobile-edge.spec.ts",
+    "test:ux-lab": "playwright test tests/ux-lab.spec.ts",
     "test:party-night-e2e": "playwright test tests/multibeat.spec.ts",
     "beta": "node scripts/beta.mjs"
   },

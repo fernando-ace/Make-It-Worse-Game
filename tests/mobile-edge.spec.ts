@@ -50,7 +50,8 @@ test("eight-player targeted game remains usable on short mobile viewports with l
     for (const page of pages) {
       const metrics = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
       expect(metrics.scroll).toBeLessThanOrEqual(metrics.width);
-      const firstTarget = page.locator(".choice-button:not(:disabled)").first();
+      await expect(page.locator(".player-chip:not(:disabled)")).toHaveCount(7);
+      const firstTarget = page.locator(".player-chip:not(:disabled)").first();
       await firstTarget.scrollIntoViewIfNeeded();
       const rect = await firstTarget.boundingBox();
       expect(rect).toBeTruthy();
@@ -58,7 +59,7 @@ test("eight-player targeted game remains usable on short mobile viewports with l
     }
 
     await Promise.all(pages.map(async page => {
-      await page.locator(".choice-button:not(:disabled)").first().click();
+      await page.locator(".choice-button:not(:disabled), .player-chip:not(:disabled)").first().click();
       await expect.poll(() => snapshots.get(page)?.session?.round?.myChoice).toBeTruthy();
     }));
     await expect.poll(() => snapshots.get(host)?.session?.phase).toBe("game-results");

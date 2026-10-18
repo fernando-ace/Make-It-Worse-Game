@@ -11,7 +11,7 @@ if (process.env.NEXT_PUBLIC_SUPABASE_URL && !getEnvironmentSafety().browserTestA
 
 export default defineConfig({
   testDir: "tests",
-  testMatch: ["live.spec.ts", "party.spec.ts", "multibeat.spec.ts", "reconnect.spec.ts", "deadline.spec.ts", "mobile-edge.spec.ts"],
+  testMatch: ["live.spec.ts", "party.spec.ts", "multibeat.spec.ts", "reconnect.spec.ts", "deadline.spec.ts", "mobile-edge.spec.ts", "ux-lab.spec.ts"],
   timeout: 360000,
   expect: { timeout: 12000 },
   workers: 1,

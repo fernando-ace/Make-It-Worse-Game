@@ -7,6 +7,7 @@ on:
       - feat/party-night-2-field-test-release
       - feat/party-night-3-social-ux
       - feat/party-night-3-safe-beta
+      - feat/party-night-3-player-experience
   pull_request:
     branches: [master]
 
@@ -98,6 +99,8 @@ jobs:
         env:
           E2E_TEST_MODE: "1"
           E2E_TEST_GAME_ID: secret-handshake
+      - name: Verify deterministic UX Lab rendering
+        run: npm run test:ux-lab
       - name: Upload browser diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4

@@ -72,7 +72,7 @@ test("two friends complete a full mobile session without horizontal overflow", a
             await host.setViewportSize({ width, height });
             const layout = await host.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
             expect(layout.scroll).toBeLessThanOrEqual(layout.width);
-            const choice = host.locator(".choice-button:not(:disabled)").first();
+            const choice = host.locator(".choice-button:not(:disabled), .player-chip:not(:disabled)").first();
             await choice.scrollIntoViewIfNeeded();
             const bounds = await choice.boundingBox();
             expect(bounds).toBeTruthy();
@@ -92,7 +92,7 @@ test("two friends complete a full mobile session without horizontal overflow", a
         for (let beat = 0; beat < 2; beat++) {
           if (beat === 1 && !hasSecondBeat) break;
           for (const page of ordered) {
-            const choice = page.locator(".choice-button:not(:disabled)").first();
+            const choice = page.locator(".choice-button:not(:disabled), .player-chip:not(:disabled)").first();
             await choice.click();
             if (beat === 0 && hasSecondBeat) {
               await expect.poll(() => latest.get(page)?.session?.round?.beat?.index === 1 || Boolean(latest.get(page)?.session?.round?.myChoice)).toBe(true);
