@@ -35,8 +35,11 @@ test("two friends complete a full mobile session without horizontal overflow", a
       await expect(page.locator(".connection")).toHaveText("Connected");
       expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
     }));
+    const playerName = host.getByLabel("Your name");
+    await playerName.focus();
+    await expect(playerName).toHaveCSS("outline-width", "3px");
     await host.keyboard.press("Tab");
-    expect(await host.evaluate(() => getComputedStyle(document.activeElement!).outlineWidth)).not.toBe("0px");
+    await expect(host.getByLabel("Room code")).toBeFocused();
     await host.getByLabel("Your name").fill("Host With A Very Long");
     await host.getByRole("button", { name: "Create game" }).click();
     await expect(host.getByRole("heading", { name: "The room is yours." })).toBeVisible();
