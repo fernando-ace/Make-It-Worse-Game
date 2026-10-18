@@ -1,6 +1,14 @@
 # Party Night beta field-test kit
 
-Use a dedicated non-production build and Supabase project for real groups. Do not use the production URL or production data for validation. Automated CI uses a disposable local Supabase stack; human playtests still need a reachable non-production app configured against a dedicated non-production Supabase project.
+## Evidence status for Party Night 3.2
+
+**AUTOMATED HUMAN-LIKE UX EVIDENCE:** Deterministic UX Lab fixtures use real shared presentation components and local Chromium/Playwright. Hosted CI uses an ephemeral local Supabase stack for actual API-backed multiplayer sessions. Neither uses production data.
+
+**BLOCKED DEPLOYED BETA EVIDENCE:** The current Vercel Preview is intentionally disconnected from Supabase. No isolated free Supabase project slot is available; an additional branch would cost approximately $0.01344/hour. No spend is approved. Do not test Preview multiplayer, connect it to Production, or create infrastructure. The deployed beta blocker is an infrastructure decision for Fernando.
+
+**HUMAN EVIDENCE STILL NEEDED:** Play complete sessions with real groups on physical phones and desktop; observe actual conversation, reactions, waiting, and replay intent. VoiceOver/TalkBack, on-screen keyboard, safe areas, and text scaling also need physical-device checks. Automated fixtures and simulations do not establish enjoyment.
+
+Once isolated infrastructure is authorized separately, use a dedicated non-production build and Supabase project for real groups. Do not use the production URL or production data for validation. Automated CI uses a disposable local Supabase stack; human playtests still need a reachable non-production app configured against a dedicated non-production Supabase project.
 
 ## Before
 

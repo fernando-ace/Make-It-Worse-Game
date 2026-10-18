@@ -124,7 +124,11 @@ Run the larger deterministic structural balance matrix with `npm run test:balanc
 
 ### Browser and beta evidence
 
-The GitHub Actions workflow starts one ephemeral local Supabase stack, applies the repository migrations, installs Chromium, and drives the real app/API for each two-beat game. It uses no project secrets and does not deploy. Pushes to `feat/party-night-3-social-ux` and `feat/party-night-3-safe-beta` run this same browser workflow. To run a single selected two-beat game locally, start local Supabase, set `E2E_TEST_MODE=1` and `E2E_TEST_GAME_ID` in the app process, and run `npm run test:party-night-e2e`. The server ignores this selector in production and reads it only from its own environment; clients cannot submit a seed or game selector.
+The GitHub Actions workflow starts one ephemeral local Supabase stack, applies the repository migrations, installs Chromium, and drives the real app/API for multiplayer flows. It also runs the deterministic UX Lab browser matrix. It uses no project secrets and does not deploy. Pushes to the Party Night 3 safe-beta and player-experience branches run this workflow. To run a single selected two-beat game locally, start local Supabase, set `E2E_TEST_MODE=1` and `E2E_TEST_GAME_ID` in the app process, and run `npm run test:party-night-e2e`. The server ignores this selector in production and reads it only from its own environment; clients cannot submit a seed or game selector.
+
+### UX Lab (no Supabase)
+
+Run `npm run dev`, then open `http://localhost:3000/ux-lab`. Choose a deterministic fixture state from the menu or link directly, for example `/ux-lab?state=target-picker`. It renders shared application components and fixed sample content without room API calls or persisted state. The route returns 404 in production. Run `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium npm run test:ux-lab` when using a system Chromium installation; the suite checks touch targeting, privacy labels, keyboard focus, reduced motion, and layout overflow from 390 px through 1440 px.
 
 Sanitized server-derived event/metric exports can be summarized without production access using `npm run beta:analyze -- <input.json>`. The analyzer accepts only an allowlist of aggregate fields and refuses names, identifiers, private feedback, choices, tokens, or arbitrary payloads. It writes adjacent `.summary.json` and `.summary.md` files. See [the candidate report](docs/party-night-2-beta-candidate.md) and [the field-test results template](docs/beta-results-template.md).
 
@@ -166,6 +170,8 @@ The production Vercel project is connected to the `master` branch. Before releas
 Use [docs/public-beta-field-test.md](docs/public-beta-field-test.md) for a short group play test, device checklist, questions, and issue severity guide.
 
 See [docs/party-night-3-social-ux.md](docs/party-night-3-social-ux.md) for the Party Night 3.0 interaction design, responsive and accessibility review, reliability evidence, and remaining human testing.
+
+See [docs/party-night-3-player-experience.md](docs/party-night-3-player-experience.md) for the current player-journey audit, UX Lab, and Party Night 3.2 UX evidence and limitations.
 
 ## Party Night 2.0 architecture
 
