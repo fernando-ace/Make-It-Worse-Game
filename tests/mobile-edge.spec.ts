@@ -59,7 +59,7 @@ test("eight-player targeted game remains usable on short mobile viewports with l
     }
 
     await Promise.all(pages.map(async page => {
-      await page.locator(".choice-button:not(:disabled), .player-chip:not(:disabled)").first().click();
+      await page.locator(".decision-phase .choice-button:not(:disabled), .decision-phase .player-chip:not(:disabled)").first().click();
       await expect.poll(() => snapshots.get(page)?.session?.round?.myChoice).toBeTruthy();
     }));
     await expect.poll(() => snapshots.get(host)?.session?.phase).toBe("game-results");

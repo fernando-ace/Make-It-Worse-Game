@@ -136,8 +136,8 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     const startingBeat = round?.beat?.index;
     const targetedPlayerId = choice?.match(/^(?:target|reach|pass|favor):(.+)$/)?.[1];
     const targetedPlayer = targetedPlayerId ? latest.get(page)?.players.find((player) => player.id === targetedPlayerId) : undefined;
-    if (targetedPlayer) await page.locator(".player-chip").filter({ hasText: targetedPlayer.name }).first().click();
-    else await page.locator(".choice-button").getByText(label, { exact: true }).first().click();
+    if (targetedPlayer) await page.locator(".decision-phase .player-chip").filter({ hasText: targetedPlayer.name }).first().click();
+    else await page.locator(".decision-phase .choice-button").getByText(label, { exact: true }).first().click();
     await expect.poll(() => {
       const current = latest.get(page)?.session?.round;
       return current?.myChoice === choice || (startingBeat === 0 && current?.beat?.index === 1);
@@ -146,8 +146,8 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       const order = latest.get(host)?.session?.round?.firstCommitPlayerId;
       const secondBeatOrder = order ? [pages.find(candidate => latest.get(candidate)?.me === order)!, ...pages.filter(candidate => latest.get(candidate)?.me !== order)] : pages;
       for (const candidate of secondBeatOrder) {
-        await expect(candidate.locator(".choice-button:not(:disabled), .player-chip:not(:disabled)").first()).toBeEnabled({ timeout: 60000 });
-        await candidate.locator(".choice-button:not(:disabled), .player-chip:not(:disabled)").first().click();
+        await expect(candidate.locator(".decision-phase .choice-button:not(:disabled), .decision-phase .player-chip:not(:disabled)").first()).toBeEnabled({ timeout: 60000 });
+        await candidate.locator(".decision-phase .choice-button:not(:disabled), .decision-phase .player-chip:not(:disabled)").first().click();
         await expect.poll(() => latest.get(candidate)?.session?.round?.myChoice, { timeout: 60000 }).toBeTruthy();
       }
     }
@@ -158,7 +158,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
     if (latest.get(host)?.session?.phase === "game-results") return;
     for (const page of pages) {
       if (latest.get(page)?.session?.phase !== "active-game" || latest.get(page)?.session?.round?.myChoice) continue;
-      const available = page.locator(".choice-button:not(:disabled), .player-chip:not(:disabled)").first();
+      const available = page.locator(".decision-phase .choice-button:not(:disabled), .decision-phase .player-chip:not(:disabled)").first();
       if (await available.count()) await available.click();
       await expect.poll(() => Boolean(latest.get(page)?.session?.round?.myChoice) || latest.get(page)?.session?.phase === "game-results", { timeout: 60000 }).toBe(true);
     }
@@ -280,7 +280,7 @@ test("three players complete the six-game Make It Worse session with privacy, Ho
       if (round.firstCommitPlayerId) {
         const waitingPage = pages.find((page) => page !== commitPage)!;
         await expect(waitingPage.locator(".first-commit-note")).toBeVisible();
-      await expect(waitingPage.locator(".choice-button, .player-chip").first()).toBeDisabled();
+      await expect(waitingPage.locator(".decision-phase .choice-button, .decision-phase .player-chip").first()).toBeDisabled();
       }
       const commitName = latest.get(commitPage)!.players.find((player) => player.id === latest.get(commitPage)!.me)?.name ?? "Host";
       const commitLabel = labelFor(gameId, commitName, options);
