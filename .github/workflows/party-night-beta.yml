@@ -8,6 +8,7 @@ on:
       - feat/party-night-3-social-ux
       - feat/party-night-3-safe-beta
       - feat/party-night-3-player-experience
+      - feat/party-night-3-local-party-lab
   pull_request:
     branches: [master]
 

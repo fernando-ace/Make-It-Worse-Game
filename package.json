@@ -12,6 +12,7 @@
     "test:simulation": "vitest run tests/session-simulation.test.ts",
     "test:balance": "SIMULATION_SESSIONS=10000 SIMULATION_REPORT_DIR=work vitest run tests/session-simulation.test.ts",
     "beta:analyze": "node scripts/beta-analyze.mjs",
+    "party": "node scripts/party.mjs",
     "test:live": "playwright test tests/live.spec.ts",
     "test:party": "playwright test tests/party.spec.ts",
     "test:reconnect": "playwright test tests/reconnect.spec.ts",

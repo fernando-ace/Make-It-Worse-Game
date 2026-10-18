@@ -38,6 +38,47 @@ describe("environment safety", () => {
     expect(safety.betaExportAllowed).toBe(false);
   });
 
+  it("allows the explicitly marked local-party operator only on a private local Supabase URL", () => {
+    const env = {
+      NODE_ENV: "development",
+      NEXT_PUBLIC_DEPLOYMENT_CLASS: "development",
+      NEXT_PUBLIC_LOCAL_PARTY_MODE: "true",
+      LOCAL_PARTY_MODE: "true",
+      NEXT_PUBLIC_SUPABASE_URL: "http://192.168.1.40:54321",
+      SUPABASE_PROJECT_REF: "local",
+    };
+    const safety = getEnvironmentSafety(env);
+    expect(safety.backendClass).toBe("local");
+    expect(safety.runtimeMutationAllowed).toBe(true);
+    expect(safety.betaExportAllowed).toBe(true);
+    expect(getEnvironmentSafety({ ...env, NEXT_PUBLIC_SUPABASE_URL: "https://jfosecuafntktpudjhyj.supabase.co" }).betaExportAllowed).toBe(false);
+    expect(getEnvironmentSafety({ ...env, NEXT_PUBLIC_SUPABASE_URL: "https://unknown-project.supabase.co" }).betaExportAllowed).toBe(false);
+    expect(getEnvironmentSafety({
+      NODE_ENV: "development",
+      NEXT_PUBLIC_SUPABASE_URL: "http://192.168.1.40:54321",
+    }).runtimeMutationAllowed).toBe(false);
+  });
+
+  it("refuses local-party mode under any production classification", () => {
+    for (const env of [
+      { VERCEL_ENV: "production" },
+      { NEXT_PUBLIC_DEPLOYMENT_CLASS: "production" },
+      { BETA_DEPLOYMENT_CLASS: "production" },
+      { NODE_ENV: "production" },
+    ]) {
+      const safety = getEnvironmentSafety({
+        NODE_ENV: "development",
+        NEXT_PUBLIC_DEPLOYMENT_CLASS: "development",
+        NEXT_PUBLIC_LOCAL_PARTY_MODE: "true",
+        LOCAL_PARTY_MODE: "true",
+        NEXT_PUBLIC_SUPABASE_URL: "http://192.168.1.40:54321",
+        SUPABASE_PROJECT_REF: "local",
+        ...env,
+      });
+      expect(safety.betaExportAllowed).toBe(false);
+    }
+  });
+
   it("refuses Preview pointed at the production project", () => {
     const safety = getEnvironmentSafety({
       VERCEL_ENV: "preview",

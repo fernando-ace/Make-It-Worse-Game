@@ -35,7 +35,7 @@ function friendlyError(message: string) {
   if (lower.includes("enter your name")) return "Add your name to join the party.";
   if (lower.includes("six-character")) return "Enter the full six-character room code.";
   if (lower.includes("server configuration") || lower.includes("supabase")) return "The party room is offline right now. Try again in a little while.";
-  if (lower.includes("network") || lower.includes("fetch")) return "Connection interrupted. Check your internet and try again.";
+  if (lower.includes("network") || lower.includes("fetch")) return "Connection lost. Stay here while we reconnect.";
   return message;
 }
 
@@ -234,7 +234,7 @@ export default function ControlRoom() {
         if (saved && (invite.status === "none" || (invite.status === "valid" && saved === invite.code))) {
           trackClientBetaEvent("reconnect_attempted", { code: saved });
           try { await call("action", saved, { type: "sync" }); trackClientBetaEvent("reconnect_succeeded", { code: saved }); }
-          catch { trackClientBetaEvent("reconnect_failed", { code: saved }); localStorage.removeItem("cr-room"); }
+          catch { trackClientBetaEvent("reconnect_failed", { code: saved }); }
         }
       } catch (cause) {
         if (alive) setError(friendlyError(cause instanceof Error ? cause.message : "Could not connect."));
@@ -340,7 +340,7 @@ export default function ControlRoom() {
   const roundMoments = round?.result ? revealMoments(round.result, room!.players) : [];
 
   return <main className="app-shell">
-    <header className="topbar"><Link className="brand" href="/" aria-label="Make It Worse home"><span className="brand-mark"><Crown size={21} strokeWidth={2.5} aria-hidden="true" /></span><span>MAKE IT WORSE<small>PARTY GAME</small></span></Link><span className={`connection ${network === "Connected" ? "is-online" : ""}`} aria-live="polite"><i className={network === "Connected" ? "online" : ""} />{network}</span></header>
+    <header className="topbar"><Link className="brand" href="/" aria-label="Make It Worse home"><span className="brand-mark"><Crown size={21} strokeWidth={2.5} aria-hidden="true" /></span><span>MAKE IT WORSE<small>PARTY GAME</small></span></Link>{process.env.NEXT_PUBLIC_LOCAL_PARTY_MODE === "true" && !session && <span className="local-party-badge" aria-label="Local Party Lab. Production is blocked.">LOCAL · PROD BLOCKED</span>}<span className={`connection ${network === "Connected" ? "is-online" : ""}`} aria-live="polite"><i className={network === "Connected" ? "online" : ""} />{network}</span></header>
     {!room ? <section className="landing">
       <div className="hero-copy"><div className="hero-lockup"><span className="hero-star"><Sparkles size={37} strokeWidth={2.8} aria-hidden="true" /></span><h1>MAKE IT<br/><em>WORSE.</em></h1></div><p className="hero-line">Friends play short games.<br/>Winners change the rules.<br/>Every round gets worse.</p><p>Start a room. Bring your people. No accounts, no setup.</p><div className="hero-chips"><span>2–8 friends</span><span>6 quick games</span><span>Phones welcome</span></div></div>
       <LandingEntry name={name} code={code} error={error} identity={identity} busy={busy} onNameChange={setName} onCodeChange={setCode} onCreate={() => void enter("create")} onJoin={() => void enter("join")} onEnter={() => void enter(code ? "join" : "create")} />

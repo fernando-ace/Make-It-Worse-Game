@@ -52,6 +52,7 @@ summary { cursor: pointer; }
 .connection i { width: 8px; height: 8px; border-radius: 50%; background: #c3a16f; }
 .connection i.online { background: #4ca866; }
 .connection.is-online { color: var(--success); }
+.local-party-badge { padding: 6px 9px; border: 1px solid #c9dfcf; border-radius: 999px; color: #2f7044; background: #edf6ef; font-size: 9px; font-weight: 900; letter-spacing: .06em; white-space: nowrap; }
 
 .landing { width: min(1120px, 100%); min-height: min(790px, calc(100vh - 130px)); flex: 1; margin: auto; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(350px, .78fr); align-content: center; align-items: center; gap: clamp(48px, 8vw, 120px); padding: 64px 0 78px; position: relative; }
 .hero-copy { max-width: 640px; }
