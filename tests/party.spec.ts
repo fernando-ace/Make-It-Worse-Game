@@ -2,10 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { existsSync } from "node:fs";
 import type { Snapshot } from "../lib/types";
+import { expectEphemeralSupabase } from "./helpers/reconnect";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 
 test("two friends complete a full mobile session without horizontal overflow", async ({ browser }) => {
+  test.skip(!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || !process.env.SUPABASE_SECRET_KEY, "Requires ephemeral local Supabase.");
+  expectEphemeralSupabase();
   test.setTimeout(900000);
   const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
   const [host, guest] = await Promise.all(contexts.map((context) => context.newPage()));
@@ -27,18 +30,25 @@ test("two friends complete a full mobile session without horizontal overflow", a
     await Promise.all([host, guest].map(async (page) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: /Know your friends/ })).toBeVisible();
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await expect(page.getByRole("heading", { name: /Get the group together/i })).toBeVisible();
       await expect(page.locator(".connection")).toHaveText("Connected");
+      expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
     }));
-    await host.getByLabel("Your name").fill("Host QA");
-    await host.getByRole("button", { name: "Create a room" }).click();
+    const playerName = host.getByLabel("Your name");
+    await playerName.focus();
+    await expect(playerName).toHaveCSS("outline-width", "3px");
+    await host.keyboard.press("Tab");
+    await expect(host.getByLabel("Room code")).toBeFocused();
+    await host.getByLabel("Your name").fill("Host With A Very Long");
+    await host.getByRole("button", { name: "Create game" }).click();
     await expect(host.getByRole("heading", { name: "The room is yours." })).toBeVisible();
     const code = await host.locator(".room-banner strong").innerText();
     roomCode = code;
-    await guest.getByLabel("Your name").fill("Guest QA");
+    await guest.getByLabel("Your name").fill("Guest With A Very Long");
     await guest.getByLabel("Room code").fill(code);
-    await guest.getByRole("button", { name: "Join the party" }).click();
-    await expect(guest.getByText("Guest QA", { exact: false })).toBeVisible();
+    await guest.getByRole("button", { name: "Join game" }).click();
+    await expect(guest.getByText("Guest With A Very Long", { exact: false })).toBeVisible();
     await expect(host.locator(".player-row")).toHaveCount(2);
     await host.getByLabel("Chaos intensity").selectOption("high");
     await expect.poll(() => latest.get(guest)?.chaosIntensity).toBe("high");
@@ -58,16 +68,36 @@ test("two friends complete a full mobile session without horizontal overflow", a
         await host.getByRole("button", { name: `Start game ${number}` }).click();
         await expect.poll(() => [host, guest].every((page) => latest.get(page)?.session?.phase === "active-game" && latest.get(page)?.session?.round?.number === number)).toBe(true);
         if (number === 1) {
+          for (const [width, height] of [[390, 640], [390, 844], [430, 720], [844, 390], [768, 1024], [1024, 768], [1440, 900]]) {
+            await host.setViewportSize({ width, height });
+            const layout = await host.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+            expect(layout.scroll).toBeLessThanOrEqual(layout.width);
+            const choice = host.locator(".choice-grid .choice-button:not(:disabled), .choice-grid .player-chip:not(:disabled)").first();
+            await choice.scrollIntoViewIfNeeded();
+            const bounds = await choice.boundingBox();
+            expect(bounds).toBeTruthy();
+            expect(bounds!.height).toBeGreaterThanOrEqual(40);
+          }
+          await host.setViewportSize({ width: 390, height: 844 });
+        }
+        if (number === 1) {
           expect(latest.get(host)?.session?.chaosIntensity).toBe("high");
           expect(latest.get(guest)?.session?.myChaos).toBe(3);
         }
         expect(latest.get(host)?.session?.round?.minigameId).toBe(gameId);
         await expect(guest.locator(".reveal-list")).toHaveCount(0);
+        const hasSecondBeat = Boolean(latest.get(host)?.session?.round?.beat);
         const firstId = latest.get(host)!.session!.round!.firstCommitPlayerId;
         const ordered = firstId ? [pagesFor(firstId), ...[host, guest].filter((page) => latest.get(page)?.me !== firstId)] : [host, guest];
-        for (const page of ordered) {
-          await page.locator(".choice-button:not(:disabled)").first().click();
-          await expect.poll(() => Boolean(latest.get(page)?.session?.round?.myChoice)).toBe(true);
+        for (let beat = 0; beat < 2; beat++) {
+          if (beat === 1 && !hasSecondBeat) break;
+          for (const page of ordered) {
+            const choice = page.locator(".choice-grid .choice-button:not(:disabled), .choice-grid .player-chip:not(:disabled)").first();
+            await choice.click();
+            if (beat === 0 && hasSecondBeat) {
+              await expect.poll(() => latest.get(page)?.session?.round?.beat?.index === 1 || Boolean(latest.get(page)?.session?.round?.myChoice)).toBe(true);
+            } else await expect.poll(() => Boolean(latest.get(page)?.session?.round?.myChoice) || latest.get(page)?.session?.phase === "game-results").toBe(true);
+          }
         }
         await expect.poll(() => latest.get(host)?.session?.phase).toBe("game-results");
         await expect(host.locator(".reveal-row")).toHaveCount(2);
@@ -101,9 +131,14 @@ test("two friends complete a full mobile session without horizontal overflow", a
     await host.setViewportSize({ width: 390, height: 844 });
     await host.getByRole("button", { name: "Give feedback" }).click();
     await expect(host.getByText("How fun was the session?")).toBeVisible();
+    await host.reload();
+    await expect(host.locator(".connection")).toHaveText("Connected");
+    await expect(host.getByRole("button", { name: "Give feedback" })).toBeVisible();
+    await host.getByRole("button", { name: "Give feedback" }).click();
+    await expect(host.getByText("How fun was the session?")).toBeVisible();
     for (const page of [host, guest]) {
-      for (const width of [390, 430, 768, 1024, 1440]) {
-        await page.setViewportSize({ width, height: width <= 430 ? 932 : 900 });
+      for (const [width, height] of [[390, 640], [390, 932], [430, 720], [430, 932], [768, 1024], [820, 1180], [1024, 768], [1440, 900]]) {
+        await page.setViewportSize({ width, height });
         const size = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
         expect(size.width).toBe(width);
         expect(size.scroll).toBeLessThanOrEqual(size.width);

@@ -14,6 +14,8 @@ export { POWER_LIST } from "./powers";
 export { GAME_DIRECTOR_METADATA, directSessionGames } from "./director";
 type HouseRuleDefinition = Omit<HouseRule, "effect"> & { compatibleFamilies: string[] };
 export const HOUSE_RULES: HouseRuleDefinition[] = [
+  { id: "binding-promises", name: "Your Word Matters", description: "Kept route or venue promises earn +2; broken promises cost 1. Applies after multipliers.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["public-commitment", "resource-allocation"] },
+  { id: "breathing-room", name: "Talk It Out", description: "Add 15 seconds to each decision in two-beat games. Make a deal before locking.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["public-commitment", "resource-allocation", "asymmetric-report", "sequential-pressure"] },
   { id: "underdog", name: "Underdog", description: "The player in last place earns +1 when they score.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["*"] },
   { id: "bounty", name: "Bounty", description: "Outscore the marked player's base points to earn +2.", activationPoint: "next-game", canStack: false, compatibleFamilies: ["*"] },
   { id: "double-down", name: "Double Down", description: "Double points scored in each later game, stacking up to ×4.", activationPoint: "next-game", canStack: true, compatibleFamilies: ["*"] },
@@ -37,19 +39,20 @@ function createRound(number: number, minigameId: string, config: PartyRound["con
   const firstCommit = rules.find((rule) => rule.effect.type === "forced-first");
   const preferredId = firstCommit?.effect.type === "forced-first" ? firstCommit.effect.playerId : null;
   const firstCommitPlayerId = preferredId && players.some((player) => player.id === preferredId) ? preferredId : null;
-  return { number, minigameId, startedAt: now, deadlineAt: now + ROUND_SECONDS * 1000, config: structuredClone(config), submissions: {}, firstCommitPlayerId, result: null };
+  const beats = MINIGAMES[minigameId].multiBeat;
+  return { ...(beats ? { beat: { index: 0 as const, firstChoices: {}, publicLines: [], privateHints: {} } } : {}), number, minigameId, openedAt: now, startedAt: now, deadlineAt: now + ((beats?.seconds[0] ?? ROUND_SECONDS) + (beats && rules.some(rule => rule.effect.type === "breathing-room") ? 15 : 0)) * 1000, config: structuredClone(config), submissions: {}, firstCommitPlayerId, result: null };
 }
-function createSession(room: Room, seed = randomBytes(16).toString("hex"), avoidSlots?: string[], chaosIntensity: ChaosIntensity = "standard"): PartySession {
+function createSession(room: Room, seed = randomBytes(16).toString("hex"), avoidSlots?: string[], chaosIntensity: ChaosIntensity = "standard", now = Date.now()): PartySession {
   let attempt = 0;
   let selectedSeed = seed;
-  let gameSlots = selectSessionGames(selectedSeed);
+  let gameSlots = directSessionGames(selectedSeed, MINIGAMES, room.players.length);
   while (avoidSlots && gameSlots.join("|") === avoidSlots.join("|") && attempt < 8) {
     selectedSeed = `${seed}:runback:${++attempt}`;
-    gameSlots = selectSessionGames(selectedSeed);
+    gameSlots = directSessionGames(selectedSeed, MINIGAMES, room.players.length);
   }
   const firstGame = MINIGAMES[gameSlots[0]];
   return {
-    phase: "game-intro", gameNumber: 1, gameSlots, seed: selectedSeed, chaosIntensity,
+    phase: "game-intro", startedAt: now, gameNumber: 1, gameSlots, seed: selectedSeed, chaosIntensity,
     objectives: assignObjectives(selectedSeed, room.players, gameSlots),
     objectivesRevealedBy: [],
     chaos: Object.fromEntries(room.players.map((player) => [player.id, chaosIntensity === "high" ? 3 : 2])), activePowers: [], scoreProgression: [Object.fromEntries(room.players.map((player) => [player.id, 0]))],
@@ -62,11 +65,18 @@ function createSession(room: Room, seed = randomBytes(16).toString("hex"), avoid
 function hydrateSession(room: Room) {
   const session = room.session;
   if (!session) return;
+  if (!session.startedAt) session.startedAt = room.createdAt;
   if (!session.seed) session.seed = `${room.id}:legacy-session`;
   if (!session.objectives) session.objectives = assignObjectives(session.seed, room.players, session.gameSlots);
   if (!session.objectivesRevealedBy) session.objectivesRevealedBy = [];
   if (!session.chaos) session.chaos = Object.fromEntries(room.players.map((player) => [player.id, 2]));
   if (!session.activePowers) session.activePowers = [];
+  if (!session.scores) session.scores = Object.fromEntries(room.players.map(player => [player.id, 0]));
+  if (!session.activeRules) session.activeRules = [];
+  if (!session.offeredRules) session.offeredRules = [];
+  if (!session.history) session.history = [];
+  if (!session.awards) session.awards = [];
+  if (!session.gameNumber) session.gameNumber = 1;
   if (!session.scoreProgression) session.scoreProgression = [Object.fromEntries(room.players.map((player) => [player.id, 0]))];
 }
 function selectWinner(players: Player[], round: PartyRound) {
@@ -77,6 +87,8 @@ function rulePool(session: PartySession, players: Player[]): HouseRule[] {
   return HOUSE_RULES.filter((rule) => (rule.compatibleFamilies.includes("*") || rule.compatibleFamilies.some((family) => futureFamilies.has(family))) && (rule.id === "double-down"
     ? session.activeRules.filter((active) => active.id === rule.id).length < 2
     : rule.canStack || !session.activeRules.some((active) => active.id === rule.id))).map((rule) => {
+    if (rule.id === "binding-promises") return { ...rule, effect: { type: "binding-promises" } };
+    if (rule.id === "breathing-room") return { ...rule, effect: { type: "breathing-room" } };
     if (rule.id === "underdog") return { ...rule, effect: { type: "last-place-bonus", points: 1 } };
     if (rule.id === "double-down") return { ...rule, effect: { type: "score-multiplier", multiplier: 2 } };
     if (rule.id === "first-commit") return { ...rule, effect: { type: "forced-first", playerId: players[0]?.id ?? "" } };
@@ -129,6 +141,11 @@ function applyHouseRules(players: Player[], scores: Record<string, number>, rule
   }
   for (const rule of rules) {
     const effect = rule.effect;
+    if (effect.type === "binding-promises") for (const event of game.events) if (event.type === "promise") {
+      const amount = event.kept ? 2 : -1;
+      points[event.playerId] += amount;
+      modifiers[event.playerId].push(`Your Word Matters ${amount > 0 ? "+" : ""}${amount}`);
+    }
     if (effect.type === "target-bonus") for (const event of game.events) if (event.type === "target" && points[event.actorId] !== undefined) {
       points[event.actorId] += effect.points;
       modifiers[event.actorId].push(`Pick a Side +${effect.points}`);
@@ -190,6 +207,8 @@ function applyHouseRules(players: Player[], scores: Record<string, number>, rule
     } else if (power.id === "bodyguard" && power.targetId && points[power.targetId] < 0) {
       modifiers[power.targetId].push(`Take the Hit +${Math.abs(points[power.targetId])}`);
       points[power.targetId] = 0;
+      points[power.actorId]++;
+      modifiers[power.actorId].push("Take the Hit: successful rescue +1");
       outcome = "success";
     } else if (power.id === "comeback" && actor > 0 && (scores[power.actorId] ?? 0) === Math.min(...players.map((player) => scores[player.id] ?? 0))) {
       points[power.actorId] += 2;
@@ -240,7 +259,21 @@ function resolveRound(room: Room, now: number) {
   if (!session || !round || round.result || session.phase !== "active-game") return;
   if (Object.keys(round.submissions).length < room.players.length && now < round.deadlineAt) return;
   const definition = MINIGAMES[round.minigameId];
-  const resolution = definition.resolve({ players: room.players, submissions: round.submissions, scores: session.scores, config: round.config });
+  if (definition.multiBeat && round.beat?.index === 0) {
+    const previousDeadline = round.deadlineAt;
+    const next = definition.multiBeat.advance({ players: room.players, submissions: round.submissions, seed: `${session.seed}:${round.number}` });
+    round.beat = { index: 1, firstChoices: { ...round.submissions }, publicLines: next.publicLines, privateHints: next.privateHints ?? {} };
+    round.submissions = {};
+    round.config = next.config;
+    // Late sync never grants extra decision time. A timely completion starts beat two now.
+    round.startedAt = Math.min(now, previousDeadline);
+    round.deadlineAt = round.startedAt + (definition.multiBeat.seconds[1] + (session.activeRules.some(rule => rule.effect.type === "breathing-room") ? 15 : 0)) * 1000;
+    if (now >= round.deadlineAt) resolveRound(room, now);
+    return;
+  }
+  const resolution = definition.multiBeat && round.beat
+    ? definition.multiBeat.resolve({ players: room.players, submissions: round.submissions, firstChoices: round.beat.firstChoices, seed: `${session.seed}:${round.number}` })
+    : definition.resolve({ players: room.players, submissions: round.submissions, scores: session.scores, config: round.config });
   const counts = Object.fromEntries(round.config.options.map(({ id }) => [id, Object.values(round.submissions).filter((choice) => choice === id).length]));
   round.result = applyHouseRules(room.players, session.scores, session.activeRules, resolution, counts, round.number, session.activePowers);
   const highScore = Math.max(...room.players.map((player) => round.result!.points[player.id] ?? 0));
@@ -248,26 +281,30 @@ function resolveRound(room: Room, now: number) {
   for (const [playerId, earned] of Object.entries(round.result.points)) session.scores[playerId] = Math.max(0, (session.scores[playerId] ?? 0) + earned);
   for (const player of room.players) {
     if (!Object.hasOwn(round.submissions, player.id)) continue;
-    const earnings = Math.min(3, 1 + Math.floor(Math.max(0, round.result.points[player.id] ?? 0) / 3));
+    const earnings = Math.min(8 - (session.chaos[player.id] ?? 0), Math.min(3, 1 + Math.floor(Math.max(0, round.result.points[player.id] ?? 0) / 3)));
     session.chaos[player.id] = Math.min(8, (session.chaos[player.id] ?? 0) + earnings);
     round.result.events.push({ type: "chaos-earned", playerId: player.id, amount: earnings });
   }
   advanceObjectives(session.objectives, round.result.events, round.minigameId);
   session.scoreProgression.push(structuredClone(session.scores));
   session.activePowers = [];
+  round.completedAt = now;
   session.phase = "game-results";
   session.ruleWinnerId = selectWinner(room.players, round);
   session.history.push({ number: round.number, minigameId: round.minigameId, result: structuredClone(round.result), rules: structuredClone(session.activeRules), selectedRule: null });
   chooseOffers(session, room.players);
 }
 
-function finishSession(room: Room, session: PartySession) {
+function finishSession(room: Room, session: PartySession, now: number) {
   for (const player of room.players) {
+    const reserve = Math.min(2, Math.floor((session.chaos[player.id] ?? 0) / 3));
+    session.scores[player.id] = (session.scores[player.id] ?? 0) + reserve;
     const objective = session.objectives[player.id];
     if (objective?.completed) session.scores[player.id] = (session.scores[player.id] ?? 0) + objective.reward;
   }
   session.scoreProgression[session.scoreProgression.length - 1] = structuredClone(session.scores);
   session.awards = resolveAwards(session.history, room.players);
+  session.completedAt = now;
   session.phase = "final-results";
 }
 
@@ -301,14 +338,14 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
       if (room.session) throw new Error("This party has already started");
       if (room.players.length < 2) throw new Error("At least two players are required to start");
       if (room.players.some((p) => now - p.seenAt > 15000)) throw new Error("All players must be connected before starting");
-      room.session = createSession(room, undefined, undefined, room.chaosIntensity ?? "standard");
+      room.session = createSession(room, undefined, undefined, room.chaosIntensity ?? "standard", now);
       break;
     }
     case "continue-session": {
       if (uid !== room.hostId) throw new Error("Only the host can continue the party");
       if (!session || session.phase !== "intermission") throw new Error("The party is not at an intermission");
       if (session.gameNumber >= session.gameSlots.length) {
-        finishSession(room, session);
+        finishSession(room, session, now);
         break;
       }
       session.gameNumber++;
@@ -321,7 +358,7 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
     case "restart-session": {
       if (uid !== room.hostId) throw new Error("Only the host can start a new session");
       if (!session || session.phase !== "final-results") throw new Error("Finish the current session before starting another");
-      room.session = createSession(room, randomBytes(16).toString("hex"), session.gameSlots, session.chaosIntensity);
+      room.session = createSession(room, randomBytes(16).toString("hex"), session.gameSlots, session.chaosIntensity, now);
       break;
     }
     case "begin-game": {
@@ -336,6 +373,7 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
     }
     case "submit": {
       if (!session || session.phase !== "active-game" || !session.round) throw new Error("This game is not accepting choices");
+      if (session.round.beat && action.beat !== session.round.beat.index) throw new Error("This beat changed. Reconnect and choose again.");
       if (session.round.firstCommitPlayerId && !Object.hasOwn(session.round.submissions, session.round.firstCommitPlayerId) && uid !== session.round.firstCommitPlayerId) throw new Error("The marked player must commit first");
       if (now >= session.round.deadlineAt) { resolveRound(room, now); throw new Error("Time is up for this game"); }
       if (Object.hasOwn(session.round.submissions, uid)) throw new Error("Your choice is already locked in");
@@ -346,13 +384,15 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
     }
     case "use-power": {
       if (!session || session.phase !== "active-game" || !session.round || session.round.result) throw new Error("Powers can only be used during an active game");
-      if (Object.hasOwn(session.round.submissions, uid)) throw new Error("Your choice is already locked in");
+      if (session.round.beat && action.beat !== session.round.beat.index) throw new Error("This beat changed. Reconnect and choose again.");
+      if (now >= session.round.deadlineAt) throw new Error("Time is up for this game");
       if (typeof action.value !== "string") throw new Error("Choose a power shown");
       const [id, targetId] = action.value.split(":");
       if (!Object.hasOwn(POWERS, id)) throw new Error("Choose a power shown");
       const powerId = id as keyof typeof POWERS;
       const power = POWERS[powerId];
       if (!powerOffersFor(session.seed, session.gameNumber, uid).includes(powerId)) throw new Error("That power is not in your current offer");
+      if (Object.hasOwn(session.round.submissions, uid) && !(power.targetableAfterCommit && powerId === "scout")) throw new Error("Your choice is already locked in");
       if (power.targetRequired && (!targetId || targetId === uid || !room.players.some((candidate) => candidate.id === targetId))) throw new Error("Choose another player for this power");
       if (power.targetableAfterCommit && targetId && !Object.hasOwn(session.round.submissions, targetId)) throw new Error("That player has not locked in a choice yet");
       if (!power.targetRequired && targetId) throw new Error("Choose a power shown");
@@ -360,7 +400,7 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
       const cost = power.cost;
       if ((session.chaos[uid] ?? 0) < cost) throw new Error("Not enough Chaos. Earn more by playing rounds.");
       session.chaos[uid] -= cost;
-      session.activePowers.push({ id: powerId, actorId: uid, ...(targetId ? { targetId } : {}), gameNumber: session.gameNumber });
+      session.activePowers.push({ id: powerId, actorId: uid, ...(targetId ? { targetId } : {}), gameNumber: session.gameNumber, beat: session.round.beat?.index });
       break;
     }
     case "select-rule": {
@@ -386,7 +426,7 @@ export function apply(room: Room, uid: string, action: Action, now: number, acti
     case "finish-session": {
       if (!session || session.phase !== "game-results" || session.gameNumber !== session.gameSlots.length) throw new Error("Finish the final game before ending the session");
       if (uid !== room.hostId) throw new Error("Only the host can finish the session");
-      finishSession(room, session);
+      finishSession(room, session, now);
       break;
     }
     case "reveal-objectives": {
@@ -413,7 +453,10 @@ export function snapshot(room: Room, uid: string, now: number): Snapshot {
       const myPowers = publicSession.activePowers.filter((power) => power.actorId === uid);
       const myPowerOffers = powerOffersFor(session.seed, session.gameNumber, uid);
       const scout = session.phase === "active-game" ? session.activePowers.find((power) => power.actorId === uid && power.id === "scout") : undefined;
-      const scoutedChoice = scout?.targetId ? session.round?.submissions[scout.targetId] : undefined;
+      const scoutedChoice = scout?.targetId && session.round
+        ? scout.beat === session.round.beat?.index ? session.round.submissions[scout.targetId]
+          : scout.beat === 0 && session.round.beat?.index === 1 ? session.round.beat.firstChoices[scout.targetId] : undefined
+        : undefined;
       const myIntel = scout?.targetId && scoutedChoice ? { playerId: scout.targetId, playerName: room.players.find((player) => player.id === scout.targetId)?.name ?? "Player", choice: scoutedChoice } : null;
       const objectiveReveal = session.phase === "final-results" && session.objectivesRevealedBy.includes(uid) ? structuredClone(publicSession.objectives) : undefined;
       delete (publicSession as unknown as Record<string, unknown>).seed;
@@ -422,6 +465,7 @@ export function snapshot(room: Room, uid: string, now: number): Snapshot {
       delete (publicSession as unknown as Record<string, unknown>).activePowers;
       delete (publicSession as unknown as Record<string, unknown>).objectivesRevealedBy;
       return { ...publicSession, myObjective, myChaos, myPowers, myPowerOffers, myIntel, ...(objectiveReveal ? { objectiveReveal } : {}), round: session.round ? {
+      ...(session.round.beat ? { beat: { index: session.round.beat.index, publicLines: [...session.round.beat.publicLines], myFirstChoice: session.round.beat.firstChoices[uid] ?? null, myHint: session.round.beat.privateHints[uid] ?? null } } : {}),
       number: session.round.number, minigameId: session.round.minigameId, startedAt: session.round.startedAt, deadlineAt: session.round.deadlineAt, config: structuredClone(session.round.config),
       firstCommitPlayerId: session.round.firstCommitPlayerId, result: session.round.result ? structuredClone(session.round.result) : null, answeredCount: Object.keys(session.round.submissions).length,
       myChoice: session.round.submissions[uid] ?? null, submittedIds: session.phase === "active-game" ? Object.keys(session.round.submissions) : [],

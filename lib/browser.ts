@@ -1,7 +1,9 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { assertRuntimeMutationAllowed, browserEnvironment } from "./environment-safety.mjs";
 let client: SupabaseClient | undefined;
 let anonymousSignIn: Promise<void> | null = null;
 export function browserClient() {
+  assertRuntimeMutationAllowed(browserEnvironment());
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL,
     key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key)

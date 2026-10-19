@@ -1,24 +1,34 @@
-# Make It Worse public beta field test
+# Party Night human field-test kit
 
-**Production:** https://make-it-worse-game.vercel.app
+## Evidence status
 
-## Try it with a group
+Automated evidence covers the game engine, deterministic UX Lab, simulations, and hosted ephemeral Supabase browser sessions. It cannot answer whether real people laugh, negotiate, bluff, understand the rules, or ask to replay.
 
-- Start with 3–6 people. One host creates a room and shares the invite link; everyone else joins from the link or six-character code.
-- Use a mix of iPhone Safari, Android Chrome, and a laptop if available. Try at least one player refreshing during a round and reconnecting.
-- Play the full six games, including House Rules, private objectives, powers, the staged finale, optional feedback, and same-room replay.
-- Have players submit feedback privately. Beta events and feedback are in `cr_private.beta_events` and `cr_private.beta_feedback` in the linked Supabase project's SQL editor; queries are in the README.
+**The free human-testing path is the Local Party Lab.** Follow [the setup guide](party-night-3-local-party-lab.md) to start real local Supabase and the actual game on Fernando's computer. Multiple phones join over the same LAN. The deployed Vercel Preview remains multiplayer-disabled until Fernando separately approves and provisions isolated cloud infrastructure. No spend is approved. Never connect Preview to Production or test with production Supabase.
 
-## Ask afterward
+## Before the session
 
-1. Which moment was the most fun, and which game was the least fun?
-2. Was anything unclear or awkward to do on your phone?
-3. Would you play another session with this group?
+1. Install dependencies once with `npm ci`; start Docker Desktop/Engine.
+2. If the stack has already been started before, run `npm run party -- doctor`. On first setup, an unavailable local Supabase check is expected until `party` starts it. If Wi-Fi detection chose the wrong adapter, pass `--host <computer-private-IPv4>` to both commands.
+3. Run `npm run party` (or `npm run party -- --host <computer-private-IPv4>`), confirm `Backend: LOCAL SUPABASE` and `Safety: PRODUCTION BLOCKED`, then share the printed URL with people on the same Wi-Fi.
+4. Optionally run `npm run party -- reset --confirm` before a fresh test. This clears only local Supabase data and reapplies migrations.
+5. Use separate browser profiles when practical so each phone keeps its own anonymous reconnect identity. One observer should use the compact [observer card](party-night-local-observer-card.md).
 
-## Report a serious issue
+## During play
 
-Treat a session as blocked if a player cannot join or reconnect, private choices appear before reveal, a room loses committed progress, a player cannot complete a turn, or scores/finale results are wrong. Save the approximate time, device/browser, room code, and what the player was doing; do not share private answers publicly.
+Play a full six-game session, including House Rules, Chaos/powers, secret objectives, finale, and same-room replay. Observe first; explain only when someone is blocked. Record just timestamps/game markers for confusion, silence, laughter, accusations, negotiation/promises, betrayal/targeting, power reaction, House Rule reaction, objective reveal, mobile friction, and spontaneous replay request. Do not collect names, contact details, raw choices, private objective text, hints, or identifiable quotes.
 
-## Known limits
+## After play
 
-Players use anonymous browser sessions rather than persistent accounts. Clearing browser storage may lose the identity used to reconnect. Automated browser testing is not a substitute for physical-device and real-group feedback.
+1. Ask the eight short prompts on the observer card.
+2. Export the local allowlisted evidence and optional private operator notes:
+
+   ```sh
+   npm run party -- export --label "Saturday group" --players 4 --devices "iPhone/Safari + Android/Chrome + laptop" --group new
+   npm run beta:analyze -- work/local-party-evidence.json
+   ```
+
+3. Complete the [results template](beta-results-template.md). Keep automated evidence, observed behavior, player comments, and hypotheses distinct.
+4. Stop Supabase when ready with `npm run party -- stop --confirm`. Exported evidence and local data are preserved; reset is always explicit.
+
+Do not infer enjoyment from session counts or simulation. Review the actual human observations before proposing the next major game change.

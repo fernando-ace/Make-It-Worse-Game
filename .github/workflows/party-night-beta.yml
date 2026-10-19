@@ -1,0 +1,116 @@
+name: Party Night beta candidate
+
+on:
+  push:
+    branches:
+      - feat/party-night-2-beta-candidate
+      - feat/party-night-2-field-test-release
+      - feat/party-night-3-social-ux
+      - feat/party-night-3-safe-beta
+      - feat/party-night-3-player-experience
+      - feat/party-night-3-local-party-lab
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:simulation
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: local-build-placeholder
+          SUPABASE_SECRET_KEY: local-build-placeholder
+          NEXT_PUBLIC_DEPLOYMENT_CLASS: test
+          BETA_DEPLOYMENT_CLASS: test
+
+  browser-session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start ephemeral Supabase and apply migrations
+        run: |
+          npx supabase start --exclude studio,logflare,vector,edge-runtime,storage-api,postgres-meta,functions
+          npx supabase db reset
+          npx supabase status -o env > /tmp/supabase.env
+          set -a
+          source /tmp/supabase.env
+          set +a
+          echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+          echo "SUPABASE_SECRET_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+          echo "BETA_DEPLOYMENT_CLASS=test" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_DEPLOYMENT_CLASS=test" >> "$GITHUB_ENV"
+          echo "NEXT_TELEMETRY_DISABLED=1" >> "$GITHUB_ENV"
+      - run: npm run test:live
+      - run: npm run test:party
+      - name: Verify Cross My Heart privacy and reconnect
+        run: npm run test:party-night-e2e
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: cross-my-heart
+      - name: Verify Signal Noise privacy and reconnect
+        run: npm run test:party-night-e2e
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: signal-noise
+      - name: Verify Last Seats privacy and reconnect
+        run: npm run test:party-night-e2e
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: last-seats
+      - name: Verify Breaking Point privacy and reconnect
+        run: npm run test:party-night-e2e
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: breaking-point
+      - name: Verify single-beat browser reconnect flow
+        run: npm run test:reconnect
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: split-decision
+      - name: Verify full-stack multi-beat deadline expiry
+        run: npm run test:deadline
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: cross-my-heart
+      - name: Verify eight-player mobile edge cases
+        run: npm run test:mobile-edge
+        env:
+          E2E_TEST_MODE: "1"
+          E2E_TEST_GAME_ID: secret-handshake
+      - name: Verify deterministic UX Lab rendering
+        run: npm run test:ux-lab
+      - name: Upload browser diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-session
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 5
+      - if: always()
+        run: npx supabase stop --no-backup

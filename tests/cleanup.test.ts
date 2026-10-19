@@ -8,6 +8,10 @@ import { GET } from "../app/api/cron/cleanup/route";
 describe("scheduled beta cleanup", () => {
   beforeEach(() => {
     vi.stubEnv("CRON_SECRET", "cron-test-secret");
+    vi.stubEnv("VERCEL_ENV", "");
+    vi.stubEnv("BETA_DEPLOYMENT_CLASS", "test");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOYMENT_CLASS", "test");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:54321");
     rpc.mockReset();
     rpc.mockResolvedValue({ data: { rooms: 2, events: 4, feedback: 1 }, error: null });
   });

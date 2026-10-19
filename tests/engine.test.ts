@@ -9,7 +9,7 @@ function makeRoom(count = 3): Room {
   const players = Array.from({ length: count }, (_, index) => ({ id: `p${index}`, name: `Player ${index}`, seenAt: now }));
   return { id: "room-id", code: "ABC234", hostId: "p0", revision: 0, createdAt: now, players, session: null, processed: [] };
 }
-function act(room: Room, player: string, type: string, value?: string | boolean, time = now, actionId = `test-action-${++actionNumber}`) { apply(room, player, { type, value }, time, actionId); }
+function act(room: Room, player: string, type: string, value?: string | boolean, time = now, actionId = `test-action-${++actionNumber}`) { apply(room, player, { type, value, beat: room.session?.round?.beat?.index }, time, actionId); }
 function start(room: Room) { act(room, "p0", "start"); act(room, "p0", "begin-game"); }
 function selectRule(room: Room, id: string) {
   if (room.session!.gameNumber >= room.session!.gameSlots.length) {
@@ -25,6 +25,7 @@ function selectRule(room: Room, id: string) {
     "alliance-bonus": { type: "alliance-bonus", points: 1 }, "chaos-bonus": { type: "chaos-bonus", points: 1 },
     "failed-risk-cost": { type: "failed-risk-cost", points: 1 }, "protection-bonus": { type: "protection-bonus", points: 1 },
     "cooperation-bonus": { type: "cooperation-bonus", points: 1 },
+    "binding-promises": { type: "binding-promises" }, "breathing-room": { type: "breathing-room" },
   };
   const definition = { ...HOUSE_RULES.find((rule) => rule.id === id)!, effect: effects[id] };
   room.session!.offeredRules = [definition];
@@ -189,8 +190,12 @@ describe("authoritative party session engine", () => {
     const first = makeRoom(); const second = makeRoom();
     const number = gameId === "make-it-worse" ? 2 : 1;
     setGame(first, gameId, number); setGame(second, gameId, number);
+    second.session!.seed = first.session!.seed;
     const definition = MINIGAMES[gameId];
-    for (const room of [first, second]) submissions(room, Object.fromEntries(room.players.map((player) => [player.id, room.session!.round!.config.options.find((option) => definition.validate(option.id, { players: room.players, playerId: player.id, config: room.session!.round!.config }))!.id])));
+    for (const room of [first, second]) {
+      for (let beat = 0; beat < (definition.multiBeat ? 2 : 1); beat++) submissions(room, Object.fromEntries(room.players.map((player) => [player.id, room.session!.round!.config.options.find((option) => definition.validate(option.id, { players: room.players, playerId: player.id, config: room.session!.round!.config }))!.id])));
+      expect(room.session!.round!.result).toBeTruthy();
+    }
     expect(first.session?.round?.result).toEqual(second.session?.round?.result);
   });
   it("applies persistent House Rules to a game result after its mechanic resolves", () => {
@@ -396,8 +401,10 @@ describe("authoritative party session engine", () => {
     ensurePowerOffer(room, "p1", "scout");
     expect(() => act(room, "p1", "use-power", "scout:p0")).toThrow("has not locked in");
     act(room, "p0", "submit", "RED");
+    act(room, "p1", "submit", "BLUE");
     act(room, "p1", "use-power", "scout:p0");
     expect(snapshot(room, "p1", now + 1).session?.myIntel).toEqual({ playerId: "p0", playerName: "Player 0", choice: "RED" });
+    expect(snapshot(room, "p1", now + 1).session?.round?.myChoice).toBe("BLUE");
     expect(snapshot(room, "p0", now + 1).session?.myIntel).toBeNull();
     expect(snapshot(room, "p2", now + 1).session?.myIntel).toBeNull();
     expect(snapshot(room, "p2", now + 1).session?.round?.myChoice).toBeNull();

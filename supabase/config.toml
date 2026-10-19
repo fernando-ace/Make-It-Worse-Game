@@ -1,4 +1,15 @@
 project_id = "control-room"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[realtime]
+enabled = true
+
 [auth]
 enabled = true
 enable_anonymous_sign_ins = true
