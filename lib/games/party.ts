@@ -72,7 +72,7 @@ export const prisonersDilemma: MinigameDefinition = {
   resolve({ players, submissions }) {
     const defectors = players.filter((player) => submissions[player.id] === "defect");
     const allCooperate = defectors.length === 0;
-    const points = Object.fromEntries(players.map((player) => [player.id, allCooperate ? 3 : submissions[player.id] === "defect" ? defectors.length === 1 ? 4 : 1 : defectors.length === 1 ? 0 : -1]));
+    const points = Object.fromEntries(players.map((player) => [player.id, !submissions[player.id] ? 0 : allCooperate ? 3 : submissions[player.id] === "defect" ? defectors.length === 1 ? 4 : 1 : defectors.length === 1 ? 0 : -1]));
     const reasons = Object.fromEntries(players.map((player) => [player.id, allCooperate ? "Everyone cooperated. The room earned +3 each." : submissions[player.id] === "defect" ? defectors.length === 1 ? "You defected alone and took the personal payout. +4." : "Several people defected; the trust bonus disappeared. +1." : defectors.length === 1 ? "One person defected, but you avoided a loss." : "The room defected together. Your cooperation cost 1."]));
     const events = defectors.map((player): GameEvent => ({ type: "betrayal", playerId: player.id }));
     return { ...makeResult(submissions, points, reasons, allCooperate ? "The whole room cooperated." : `${defectors.length} ${defectors.length === 1 ? "person defected" : "people defected"}.`, events), optionCounts: counts(players, submissions, ["cooperate", "defect"]) };
@@ -89,7 +89,7 @@ export const splitTheDifference: MinigameDefinition = {
   resolve({ players, submissions }) {
     const values = Object.fromEntries(players.map((player) => [player.id, Number(submissions[player.id]?.slice(7) ?? 0)]));
     const average = Object.values(values).reduce((sum, value) => sum + value, 0) / Math.max(1, players.length);
-    const points = Object.fromEntries(players.map((player) => [player.id, Math.max(0, 4 - Math.round(Math.abs(values[player.id] - average) * 2))]));
+    const points = Object.fromEntries(players.map((player) => [player.id, !submissions[player.id] ? 0 : Math.max(0, 4 - Math.round(Math.abs(values[player.id] - average) * 2))]));
     const reasons = Object.fromEntries(players.map((player) => [player.id, `You chose ${values[player.id]}; the room's average was ${average.toFixed(1)}. +${points[player.id]}.`]));
     return { ...makeResult(submissions, points, reasons, `The room settled at an average of ${average.toFixed(1)}.`), optionCounts: counts(players, submissions, numberOptions.map((option) => option.id)) };
   },

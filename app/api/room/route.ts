@@ -1,13 +1,25 @@
+import { recordPartyMetrics } from "@/lib/party-metrics";
+import { getEnvironmentSafety } from "@/lib/environment-safety.mjs";
 import { NextRequest, NextResponse } from "next/server";
 import { randomInt, randomUUID } from "node:crypto";
 import { admin } from "@/lib/server";
 import { betaSessionKey, recordBetaEvents, type BetaEvent } from "@/lib/beta";
-import { apply, join, snapshot } from "@/lib/engine";
+import { apply, directSessionGames, join, MINIGAMES, snapshot } from "@/lib/engine";
+import { assignObjectives } from "@/lib/objectives";
 import type { Room } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+function sessionAdvanced(before: Room["session"], after: Room["session"]) {
+  if (!before || !after) return before !== after;
+  return before.phase !== after.phase || before.gameNumber !== after.gameNumber
+    || before.round?.beat?.index !== after.round?.beat?.index
+    || Boolean(before.round?.result) !== Boolean(after.round?.result)
+    || (before.history?.length ?? 0) !== (after.history?.length ?? 0);
+}
 export async function POST(req: NextRequest) {
   try {
+    if (!getEnvironmentSafety().runtimeMutationAllowed)
+      return NextResponse.json({ error: "This deployment is not connected to an approved multiplayer backend." }, { status: 503 });
     const token = req.headers.get("authorization")?.replace(/^Bearer /, "");
     if (!token)
       return NextResponse.json(
@@ -77,8 +89,13 @@ export async function POST(req: NextRequest) {
       const { data, error } = await db.rpc("cr_read", { p_code: code });
       if (error) throw new Error(error.message);
       if (!data) throw new Error("Room not found");
-      const room = data.room as Room,
-        now = Number(data.now);
+      const room = data.room as Room;
+      const serverNow = Number(data.now);
+      // A bounded clock offset makes deadline races deterministic in local/CI
+      // browser tests. Production always uses the Supabase server clock.
+      const testClockOffset = process.env.NODE_ENV !== "production" && process.env.E2E_TEST_MODE === "1"
+        ? Number(req.headers.get("x-e2e-clock-offset-ms")) : 0;
+      const now = serverNow + (Number.isFinite(testClockOffset) && testClockOffset >= 0 && testClockOffset <= 300_000 ? testClockOffset : 0);
       const revision = room.revision;
       const before = structuredClone(room);
       const alreadyMember = room.players.some((player) => player.id === uid);
@@ -109,15 +126,25 @@ export async function POST(req: NextRequest) {
         if (!body.action || typeof body.action.type !== "string")
           throw new Error("Invalid action");
         apply(room, uid, body.action, now, body.actionId);
+        // This server-side lineup override exists only for local/CI browser tests.
+        // It is driven by the test process environment, never by request data, and
+        // is disabled for every production runtime even if misconfigured.
+        const testGameId = process.env.NODE_ENV !== "production" && process.env.E2E_TEST_MODE === "1"
+          && body.action.type === "start" ? process.env.E2E_TEST_GAME_ID : undefined;
+        if (testGameId && room.session && Object.hasOwn(MINIGAMES, testGameId)) {
+          const session = room.session;
+          const lineup = directSessionGames(session.seed, MINIGAMES, room.players.length);
+          session.gameSlots = [testGameId, ...lineup.filter(id => id !== testGameId).slice(0, 5)];
+          session.gameConfig = MINIGAMES[testGameId].config({ players: room.players, gameNumber: 1 });
+          session.objectives = assignObjectives(session.seed, room.players, session.gameSlots);
+        }
       }
       if (
-        body.op === "action" &&
-        body.action.type === "sync" &&
-        body.action.value === false
-      )
-        return NextResponse.json(snapshot(room, uid, now), {
-          headers: { "Cache-Control": "no-store" },
-        });
+        body.op === "action" && body.action.type === "sync" && body.action.value === false
+        && !sessionAdvanced(before.session, room.session)
+      ) return NextResponse.json(snapshot(room, uid, now), {
+        headers: { "Cache-Control": "no-store" },
+      });
       room.revision = revision + 1;
       const { data: committed, error: commitError } = await db.rpc(
         "cr_commit",
@@ -125,6 +152,7 @@ export async function POST(req: NextRequest) {
       );
       if (commitError) throw new Error(commitError.message);
       if (committed) {
+        await recordPartyMetrics(db, before, room, body.action);
         await recordBetaEvents(db, committedEvents(before, room, body.op, body.action, alreadyMember, uid));
         if (body.op === "leave")
           return NextResponse.json(
@@ -181,7 +209,7 @@ function committedEvents(before: Room, after: Room, op: string, action: { type?:
     }
     if (previousSession?.phase === "active-game" && session?.phase === "game-results") add("game_completed");
     if (action.type === "use-power" && typeof action.value === "string") add("power_used", { powerId: action.value.split(":", 1)[0] });
-    if (action.type === "reveal-objectives" && !previousSession?.objectivesRevealedBy.includes(uid) && session?.objectivesRevealedBy.includes(uid)) add("objective_revealed");
+    if (action.type === "reveal-objectives" && !(previousSession?.objectivesRevealedBy ?? []).includes(uid) && (session?.objectivesRevealedBy ?? []).includes(uid)) add("objective_revealed");
     if (action.type === "select-rule" && session?.history.at(-1)?.selectedRule) add("house_rule_selected", { houseRuleId: session.history.at(-1)!.selectedRule!.id });
     if (session) {
       const priorObjectives = previousSession?.objectives ?? {};

@@ -4,12 +4,15 @@ import { admin } from "@/lib/server";
 import { betaSessionKey, recordBetaEvents } from "@/lib/beta";
 import { MINIGAMES } from "@/lib/games";
 import type { Room } from "@/lib/types";
+import { getEnvironmentSafety } from "@/lib/environment-safety.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    if (!getEnvironmentSafety().runtimeMutationAllowed)
+      return NextResponse.json({ error: "This deployment is not connected to an approved feedback backend." }, { status: 503 });
     const token = req.headers.get("authorization")?.replace(/^Bearer /, "");
     if (!token) return NextResponse.json({ error: "Reconnect before sending feedback." }, { status: 401 });
     const db = admin();

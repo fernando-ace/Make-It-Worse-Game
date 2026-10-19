@@ -4,6 +4,8 @@ export type GamePhase = "game-intro" | "active-game" | "game-results" | "house-r
 export type ChaosIntensity = "standard" | "high";
 
 export type HouseRuleEffect =
+  | { type: "binding-promises" }
+  | { type: "breathing-room" }
   | { type: "score-multiplier"; multiplier: number }
   | { type: "last-place-bonus"; points: number }
   | { type: "bounty"; points: number; targetId: string }
@@ -17,7 +19,7 @@ export type HouseRuleEffect =
   | { type: "cooperation-bonus"; points: number };
 
 export type HouseRule = {
-  id: "underdog" | "bounty" | "double-down" | "first-commit" | "safety-net" | "target-bonus" | "alliance-bonus" | "chaos-bonus" | "failed-risk-cost" | "protection-bonus" | "cooperation-bonus";
+  id: "binding-promises" | "breathing-room" | "underdog" | "bounty" | "double-down" | "first-commit" | "safety-net" | "target-bonus" | "alliance-bonus" | "chaos-bonus" | "failed-risk-cost" | "protection-bonus" | "cooperation-bonus";
   name: string;
   description: string;
   activationPoint: "next-game";
@@ -42,6 +44,7 @@ export type GameDirectorMetadata = {
   houseRuleTags: string[];
 };
 export type GameEvent =
+  | { type: "promise"; playerId: string; kept: boolean }
   | { type: "target"; actorId: string; targetId: string }
   | { type: "gamble"; playerId: string; result: "won" | "lost" }
   | { type: "read"; playerId: string; accurate: boolean }
@@ -57,7 +60,7 @@ export type GameEvent =
   | { type: "round-score"; playerId: string; points: number; highest: boolean; gameNumber: number };
 export type ObjectiveState = { id: string; title: string; description: string; progress: number; target: number; completed: boolean; reward: number; relatedPlayerId?: string; progressedGameIds?: string[] };
 export type PowerId = "guard" | "amplify" | "bounty" | "bodyguard" | "hex" | "comeback" | "pickpocket" | "contrarian" | "scout";
-export type ActivePower = { id: PowerId; actorId: string; targetId?: string; gameNumber: number };
+export type ActivePower = { beat?: number; id: PowerId; actorId: string; targetId?: string; gameNumber: number };
 export type MinigameResolution = {
   choices: Record<string, string>;
   basePoints: Record<string, number>;
@@ -68,8 +71,10 @@ export type MinigameResolution = {
   events: GameEvent[];
   reveal: string;
 };
-export type PartyRound = { number: number; minigameId: string; startedAt: number; deadlineAt: number; config: MinigameConfig; submissions: Record<string, string>; firstCommitPlayerId: string | null; result: MinigameResolution | null };
+export type BeatState = { index: 0 | 1; firstChoices: Record<string, string>; publicLines: string[]; privateHints: Record<string, string> };
+export type PartyRound = { openedAt?: number; completedAt?: number; beat?: BeatState; number: number; minigameId: string; startedAt: number; deadlineAt: number; config: MinigameConfig; submissions: Record<string, string>; firstCommitPlayerId: string | null; result: MinigameResolution | null };
 export type PartySession = {
+  startedAt?: number; completedAt?: number;
   phase: GamePhase;
   gameNumber: number;
   gameSlots: string[];
@@ -90,7 +95,7 @@ export type PartySession = {
   history: Array<{ number: number; minigameId: string; result: MinigameResolution; rules: HouseRule[]; selectedRule: HouseRule | null }>;
   awards: SessionAward[];
 };
-export type SessionAward = { id: "most-targeted" | "biggest-gambler" | "best-read" | "worst-ally" | "chaos-agent" | "most-betrayed" | "best-ally"; name: string; playerId: string; count: number; detail: string };
+export type SessionAward = { id: "most-targeted" | "biggest-gambler" | "best-read" | "worst-ally" | "chaos-agent" | "most-betrayed" | "best-ally" | "promise-keeper" | "broken-word"; name: string; playerId: string; count: number; detail: string };
 export type MinigameDefinition = {
   id: string;
   displayName: string;
@@ -100,17 +105,22 @@ export type MinigameDefinition = {
   difficulty?: 1 | 2 | 3;
   expansion?: boolean;
   director?: GameDirectorMetadata;
+  multiBeat?: {
+    seconds: [number, number];
+    advance: (input: { players: Player[]; submissions: Record<string, string>; seed: string }) => { config: MinigameConfig; publicLines: string[]; privateHints?: Record<string, string> };
+    resolve: (input: { players: Player[]; submissions: Record<string, string>; firstChoices: Record<string, string>; seed: string }) => Omit<MinigameResolution, "points" | "modifiers" | "optionCounts">;
+  };
   options: (input: { players: Player[]; gameNumber: number }) => GameOption[];
   config: (input: { players: Player[]; gameNumber: number }) => MinigameConfig;
   validate: (choice: string, input: { players: Player[]; playerId: string; config: MinigameConfig }) => boolean;
   resolve: (input: { players: Player[]; submissions: Record<string, string>; scores: Record<string, number>; config: MinigameConfig }) => Omit<MinigameResolution, "points" | "modifiers" | "optionCounts">;
 };
 export type Room = { id: string; code: string; hostId: string; revision: number; createdAt: number; players: Player[]; blockedPlayers?: string[]; chaosIntensity?: ChaosIntensity; session: PartySession | null; processed: string[] };
-export type Action = { type: string; value?: string | number | boolean };
+export type Action = { type: string; value?: string | number | boolean; beat?: number };
 export type Snapshot = {
   id: string; code: string; hostId: string; revision: number; players: Player[]; me: string; serverNow: number; chaosIntensity: ChaosIntensity;
   session: (Omit<PartySession, "round" | "seed" | "objectives" | "objectivesRevealedBy" | "chaos" | "activePowers"> & {
-    round: (Omit<PartyRound, "submissions"> & { answeredCount: number; myChoice: string | null; submittedIds: string[] }) | null;
+    round: (Omit<PartyRound, "submissions" | "beat"> & { beat?: { index: 0 | 1; publicLines: string[]; myFirstChoice: string | null; myHint: string | null }; answeredCount: number; myChoice: string | null; submittedIds: string[] }) | null;
     myObjective: ObjectiveState; myChaos: number; myPowers: ActivePower[]; myPowerOffers: PowerId[]; myIntel: { playerId: string; playerName: string; choice: string } | null; objectiveReveal?: Record<string, ObjectiveState>;
   }) | null;
 };

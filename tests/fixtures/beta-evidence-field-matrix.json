@@ -1,0 +1,23 @@
+{
+  "events": [
+    { "name": "session_started", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "player_count": 4 },
+    { "name": "session_completed", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "player_count": 4 },
+    { "name": "game_completed", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "game_id": "cross-my-heart", "game_number": 1 },
+    { "name": "game_completed", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "game_id": "signal-noise", "game_number": 2 },
+    { "name": "reconnect_attempted", "session_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    { "name": "reconnect_succeeded", "session_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    { "name": "reconnect_attempted", "session_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    { "name": "reconnect_failed", "session_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    { "name": "session_started", "session_key": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "player_count": 2 },
+    { "name": "replay_started", "session_key": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
+    { "name": "session_started", "session_key": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "player_count": 8 },
+    { "name": "player_left", "session_key": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" },
+    { "name": "power_used", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "power_id": "scout" },
+    { "name": "house_rule_selected", "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "house_rule_id": "binding-promises" }
+  ],
+  "metrics": [
+    { "sessionKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": 2, "gameId": "cross-my-heart", "gameNumber": 1, "completed": 1, "beatTransition": 1, "decisionMs": 42000, "gameDurationMs": 65000, "firstBeatDurationMs": 25000, "secondBeatDurationMs": 40000, "chaosEarned": 2, "chaosSpent": 1, "powerSuccesses": 1, "powerMisses": 0, "activeRules": 1, "ruleSelected": 1, "sessionDurationMs": 0 },
+    { "sessionKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": 2, "gameId": "signal-noise", "gameNumber": 2, "completed": 1, "beatTransition": 1, "decisionMs": 90000, "gameDurationMs": 110000, "firstBeatDurationMs": 45000, "secondBeatDurationMs": 65000, "chaosEarned": 0, "chaosSpent": 3, "powerSuccesses": 0, "powerMisses": 1, "activeRules": 1, "ruleScoringApplications": 1, "sessionDurationMs": 0 },
+    { "sessionKey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "version": 2, "gameId": "make-it-worse", "gameNumber": 1, "completed": 1, "beatTransition": 0, "decisionMs": 30000, "gameDurationMs": 30000, "chaosEarned": 1, "chaosSpent": 0, "replayStarted": 1 }
+  ]
+}

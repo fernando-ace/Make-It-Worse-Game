@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://make-it-worse-game.vercel.app"),
@@ -21,6 +21,12 @@ export const metadata: Metadata = {
     description: "One room, 2–8 friends, and six quick games that keep making the next round stranger.",
     images: ["/opengraph-image"],
   },
+};
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#fffefa",
 };
 export default function RootLayout({
   children,

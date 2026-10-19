@@ -28,10 +28,11 @@ export type BetaEvent = {
 export function betaSessionKey(roomId: string, seed: string) {
   return createHash("sha256").update(`${roomId}:${seed}`).digest("hex");
 }
-export async function recordBetaEvents(db: { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ error: unknown }> }, events: BetaEvent[]) {
+export async function recordBetaEvents(db: { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ error: unknown }> }, events: BetaEvent[], timeoutMs = 1500) {
   if (!events.length) return;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    await db.rpc("cr_record_beta_events", {
+    const write = db.rpc("cr_record_beta_events", {
       p_events: events.map((event) => ({
         name: event.name,
         room_id: event.roomId,
@@ -45,8 +46,17 @@ export async function recordBetaEvents(db: { rpc: (name: string, args: Record<st
         error_code: event.errorCode,
       })),
     });
+    await Promise.race([
+      write,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("Beta telemetry timed out")), timeoutMs);
+        timeout.unref?.();
+      }),
+    ]);
   } catch {
     // Beta telemetry is deliberately best-effort and must never block play.
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 

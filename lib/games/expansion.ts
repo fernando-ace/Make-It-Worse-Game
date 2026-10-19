@@ -12,7 +12,7 @@ export const groupTab: MinigameDefinition = {
   validate: (choice, { config }) => config.options.some((option) => option.id === choice),
   resolve({ players, submissions }) {
     const counts = Object.fromEntries(["share", "grab", "burn"].map((id) => [id, players.filter((p) => submissions[p.id] === id).length]));
-    const majority = counts.share >= Math.ceil(players.length / 2);
+    const majority = counts.share > players.length / 2;
     const hasShare = counts.share > 0;
     const points: Record<string, number> = {}; const reasons: Record<string, string> = {}; const events: GameEvent[] = [];
     for (const player of players) {
@@ -52,8 +52,8 @@ export const bluffCheck: MinigameDefinition = {
   config: ({ players }) => ({ title: "The story sounds fake.", prompt: `Someone says ${players.length} friends all agreed on the same thing. Do you back the claim or challenge it?`, options: bluffCheck.options({ players, gameNumber: 0 }), scoreHint: "A claim earns +2 if nobody challenges, otherwise −1. A challenge earns +2 when at least one person claims; if everyone challenges, each challenger gets +1." }),
   validate: (choice, { config }) => config.options.some((option) => option.id === choice),
   resolve({ players, submissions }) {
-    const claims = players.filter((p) => submissions[p.id] === "claim").length; const challenges = players.length - claims;
-    const points = Object.fromEntries(players.map((p) => [p.id, submissions[p.id] === "claim" ? challenges === 0 ? 2 : -1 : claims > 0 ? 2 : 1]));
+    const claims = players.filter((p) => submissions[p.id] === "claim").length; const challenges = players.filter(p => submissions[p.id] === "challenge").length;
+    const points = Object.fromEntries(players.map((p) => [p.id, !submissions[p.id] ? 0 : submissions[p.id] === "claim" ? challenges === 0 ? 2 : -1 : claims > 0 ? 2 : 1]));
     const reasons = Object.fromEntries(players.map((p) => [p.id, !submissions[p.id] ? "No answer before time ran out." : submissions[p.id] === "claim" ? challenges === 0 ? "Nobody called the bluff. +2." : "The room challenged the story. −1." : claims > 0 ? "You caught someone standing by the claim. +2." : "Everyone challenged; the safe read earns +1." ]));
     const events = players.filter((p) => submissions[p.id]).map((p): GameEvent => ({ type: "read", playerId: p.id, accurate: submissions[p.id] === "claim" ? challenges === 0 : claims > 0 }));
     return { ...result(submissions, points, reasons, claims ? `${claims} stood by the story; ${challenges} challenged it.` : "Nobody backed the story.", events), optionCounts: { claim: claims, challenge: challenges } };

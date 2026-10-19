@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { admin } from "@/lib/server";
-import { BETA_EVENT_NAMES, betaSessionKey, type BetaEvent } from "@/lib/beta";
+import { BETA_EVENT_NAMES, betaSessionKey, recordBetaEvents, type BetaEvent } from "@/lib/beta";
 import type { Room } from "@/lib/types";
+import { getEnvironmentSafety } from "@/lib/environment-safety.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,8 @@ const clientEvents = new Set([
 
 export async function POST(req: NextRequest) {
   try {
+    if (!getEnvironmentSafety().runtimeMutationAllowed)
+      return NextResponse.json({ error: "This deployment is not connected to an approved telemetry backend." }, { status: 503 });
     const token = req.headers.get("authorization")?.replace(/^Bearer /, "");
     if (!token) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
     const db = admin();
@@ -34,7 +37,7 @@ export async function POST(req: NextRequest) {
       if (!/^[A-Z2-9]{6}$/.test(code)) return NextResponse.json({ error: "Room code is missing." }, { status: 400 });
       const { data, error } = await db.rpc("cr_read", { p_code: code });
       if ((error || !data) && body.name === "reconnect_failed") {
-        await db.rpc("cr_record_beta_events", { p_events: [eventToRow(event)] });
+        await recordBetaEvents(db, [event]);
         return new NextResponse(null, { status: 204 });
       }
       if (error || !data) return NextResponse.json({ error: "Room is no longer available." }, { status: 404 });
@@ -46,19 +49,10 @@ export async function POST(req: NextRequest) {
       event = { ...event, roomId: room.id };
       if (room.session) event.sessionKey = betaSessionKey(room.id, room.session.seed);
     }
-    await db.rpc("cr_record_beta_events", { p_events: [eventToRow(event)] });
+    await recordBetaEvents(db, [event]);
     return new NextResponse(null, { status: 204 });
   } catch {
     // Analytics failures are intentionally invisible to the player.
     return new NextResponse(null, { status: 204 });
   }
-}
-
-function eventToRow(event: BetaEvent) {
-  return {
-    name: event.name,
-    room_id: event.roomId,
-    session_key: event.sessionKey,
-    error_code: event.errorCode,
-  };
 }

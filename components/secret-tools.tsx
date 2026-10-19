@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Action, Snapshot } from "@/lib/types";
 import { POWER_LIST } from "@/lib/powers";
+import { ChaosWallet, PlayerChip } from "./party-presentation";
 
 export function ObjectiveCard({ snapshot }: { snapshot: Snapshot }) {
   const objective = snapshot.session?.myObjective;
@@ -20,30 +21,49 @@ export function ObjectiveCard({ snapshot }: { snapshot: Snapshot }) {
     previous.current = { id: objectiveId, progress };
   }, [objectiveId, progress, completed, reward]);
   if (!objective || snapshot.session?.phase === "final-results") return null;
-  return <section className="secret-objective" aria-label="Your secret objective">
-    <div><span>YOUR SECRET OBJECTIVE · PRIVATE</span><strong>{objective.title}</strong><p>{objective.description}</p>{feedback && <small className="objective-feedback" aria-live="polite">{feedback}</small>}</div>
-    <div className="objective-meter"><b>{objective.progress}/{objective.target}</b><i><span style={{ width: `${Math.min(100, objective.progress / objective.target * 100)}%` }}/></i></div>
-  </section>;
+  return <details className="secret-objective">
+    <summary aria-label={`Your private objective: ${objective.title}, progress ${objective.progress} of ${objective.target}`}>
+      <div><span>YOUR OBJECTIVE · PRIVATE</span><strong>{objective.title}</strong></div>
+      <div className="objective-meter"><b>{objective.progress}/{objective.target}</b><i><span style={{ width: `${Math.min(100, objective.progress / objective.target * 100)}%` }}/></i></div>
+    </summary>
+    {feedback && <small className="objective-feedback objective-feedback-live" role="status" aria-live="polite">{feedback}</small>}
+    <div className="objective-detail"><p>{objective.description}</p></div>
+  </details>;
 }
 
 export function PowerControls({ snapshot, busy, committed, onAction }: { snapshot: Snapshot; busy: boolean; committed: boolean; onAction: (action: Action) => void }) {
   const [targetId, setTargetId] = useState("");
+  const [powerFeedback, setPowerFeedback] = useState("");
   const session = snapshot.session;
-  if (!session || session.phase !== "active-game" || committed) return null;
-  const used = session.myPowers.length > 0;
-  const otherPlayers = snapshot.players.filter((player) => player.id !== snapshot.me && (!session.myPowerOffers.some((id) => POWER_LIST.find((power) => power.id === id)?.targetableAfterCommit) || session.round?.submittedIds.includes(player.id)));
+  const used = Boolean(session?.myPowers.length);
+  const currentChaos = session?.myChaos ?? 0;
+  const previous = useRef({ chaos: currentChaos, used });
+  useEffect(() => {
+    if (!previous.current.used && used && previous.current.chaos > currentChaos) {
+      const spent = previous.current.chaos - currentChaos;
+      setPowerFeedback(`Spent ${spent} Chaos · power armed for this game.`);
+    }
+    if (previous.current.used && !used) setPowerFeedback("");
+    previous.current = { chaos: currentChaos, used };
+  }, [currentChaos, used]);
+  if (!session || session.phase !== "active-game") return null;
+  const otherPlayers = snapshot.players.filter((player) => player.id !== snapshot.me);
   const selectedTarget = otherPlayers.some((player) => player.id === targetId) ? targetId : otherPlayers[0]?.id ?? "";
-  const availablePowers = POWER_LIST.filter((power) => session.myPowerOffers.includes(power.id));
-  return <section className="chaos-tools" aria-label="Spend Chaos">
-    <div className="chaos-tools-heading"><strong>Chaos {session.myChaos}</strong><span>Three rotating offers · earn Chaos by playing</span></div>
+  const availablePowers = POWER_LIST.filter((power) => session.myPowerOffers.includes(power.id) && (!committed || power.targetableAfterCommit));
+  return <details className="chaos-tools" open={used || Boolean(session.myIntel)}>
+    <summary className="chaos-tools-heading"><ChaosWallet amount={session.myChaos}/><span className="wallet-action">{used ? "View details" : `${availablePowers.length} power${availablePowers.length === 1 ? "" : "s"}`}</span></summary>
+    <p className="wallet-note">One power each game. Save 3 Chaos for +1 at the finale (max +2).</p>
+    {powerFeedback && <p className="power-feedback" role="status" aria-live="polite">{powerFeedback}</p>}
+    {!used && availablePowers.length === 0 && <p className="power-unavailable">No power is available right now. Keep your Chaos for the finale.</p>}
     <div className="power-list">{availablePowers.map((power) => <div className="power-option" key={power.id}>
       <div><strong>{power.name}</strong><p>{power.description}</p></div>
-      {power.targetRequired && <label className="power-target">{power.name === "Read Receipt" ? "Scout" : "Mark"} <select aria-label={`${power.name} target`} value={selectedTarget} onChange={(event) => setTargetId(event.target.value)}>{otherPlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
-      <button disabled={busy || used || session.myChaos < power.cost || (power.targetRequired && !selectedTarget)} onClick={() => onAction({ type: "use-power", value: power.targetRequired ? `${power.id}:${selectedTarget}` : power.id })}>{used ? "Used" : `Use · ${power.cost}`}</button>
+      {power.targetRequired && <fieldset className="power-target-picker"><legend>{power.name === "Read Receipt" ? "Choose who to scout" : "Choose who to target"}</legend><div>{otherPlayers.map((player) => <PlayerChip key={player.id} name={player.name} meta="Player" selected={selectedTarget === player.id} disabled={Boolean(power.targetableAfterCommit && !session.round?.submittedIds.includes(player.id))} onClick={() => setTargetId(player.id)}/>)}</div></fieldset>}
+      <button aria-label={`${used ? "Used" : `Use ${power.name}`} · costs ${power.cost} Chaos`} disabled={busy || used || (committed && !power.targetableAfterCommit) || session.myChaos < power.cost || (power.targetRequired && (!selectedTarget || Boolean(power.targetableAfterCommit && !session.round?.submittedIds.includes(selectedTarget))))} onClick={() => onAction({ type: "use-power", value: power.targetRequired ? `${power.id}:${selectedTarget}` : power.id })}>{used ? "Used" : `Use · ${power.cost} Chaos`}</button>
+      {session.myChaos < power.cost && <small className="power-unavailable">Need {power.cost - session.myChaos} more Chaos to use this.</small>}
     </div>)}</div>
     {used && <small className="power-armed">Your power is armed for this game. Only you can see it until the reveal.</small>}
     {session.myIntel && <small className="power-armed private-intel">Private intel · {session.myIntel.playerName} locked “{session.round?.config.options.find((option) => option.id === session.myIntel?.choice)?.label ?? "a choice"}”.</small>}
-  </section>;
+  </details>;
 }
 
 export function ObjectiveReveal({ snapshot }: { snapshot: Snapshot }) {
